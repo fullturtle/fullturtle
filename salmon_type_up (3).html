@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salmon Type-Up!</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js for Audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Nunito', sans-serif;
+            background-color: #87CEEB; /* Sky blue */
+            color: white;
+            user-select: none;
+        }
+
+        h1, h2, h3, .font-display {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        /* 
+         * CRITICAL FIX: Z-Index explicitly managed to guarantee canvas visibility 
+         */
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1; /* Above body background */
+            display: block;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10; /* Above canvas */
+        }
+
+        .pointer-events-auto { pointer-events: auto; }
+
+        .screen {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .screen.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        .error-shake {
+            animation: shake 0.3s ease-in-out;
+            color: #ef4444 !important;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: pop 0.3s ease-out;
+        }
+
+        .key-box {
+            display: inline-block;
+            min-width: 2.5rem;
+            padding: 0.25rem 0.5rem;
+            margin: 0 0.25rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 0.5rem;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .key-typed {
+            background: #ff1493;
+            border-color: #ff69b4;
+            color: white;
+            transform: scale(1.1);
+            transition: all 0.1s;
+        }
+
+        .progress-container {
+            width: 100%;
+            max-width: 400px;
+            background: rgba(255,255,255,0.8);
+            border-radius: 999px;
+            padding: 4px;
+            margin-top: 1rem;
+        }
+        .progress-bar {
+            height: 1rem;
+            border-radius: 999px;
+            background: #ff69b4;
+            transition: width 0.1s linear, background-color 0.3s;
+        }
+
+        /* --- GYARU UI STYLES --- */
+        .bg-leopard {
+            background-color: #fcebd5;
+            background-image: 
+                radial-gradient(ellipse at 15px 15px, #422811 7px, transparent 9px),
+                radial-gradient(ellipse at 15px 15px, #c98846 4px, transparent 6px),
+                radial-gradient(ellipse at 45px 40px, #422811 8px, transparent 10px),
+                radial-gradient(ellipse at 45px 40px, #c98846 5px, transparent 7px),
+                radial-gradient(circle at 75px 20px, #422811 4px, transparent 6px),
+                radial-gradient(ellipse at 80px 75px, #422811 6px, transparent 8px),
+                radial-gradient(ellipse at 80px 75px, #c98846 3px, transparent 5px),
+                radial-gradient(circle at 25px 80px, #422811 5px, transparent 7px);
+            background-size: 100px 100px;
+        }
+
+        .gyaru-panel {
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 8px solid #ff1493;
+            border-radius: 40px;
+            box-shadow: 0px 10px 30px rgba(255, 20, 147, 0.6), inset 0px 0px 20px rgba(255, 105, 180, 0.3);
+            position: relative;
+        }
+
+        .gyaru-panel::before {
+            content: '💖 🎀 💖';
+            position: absolute;
+            top: -24px;
+            font-size: 1.8rem;
+            background: #fff;
+            padding: 0 15px;
+            border-radius: 20px;
+            border: 4px solid #ff1493;
+            box-shadow: 0 4px 0 #ff1493;
+        }
+
+        .gyaru-title {
+            font-family: 'Dancing Script', cursive;
+            color: #ff69b4;
+            text-shadow: 
+                -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 3px 3px 0 #fff,
+                -5px -5px 0 #ff1493, 5px -5px 0 #ff1493, -5px 5px 0 #ff1493, 5px 5px 0 #ff1493,
+                0 0 20px #ff1493;
+            transform: rotate(-3deg);
+            margin-bottom: 1rem;
+        }
+
+        .gyaru-text {
+            font-family: 'Dancing Script', cursive;
+            color: #ff1493;
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 0 5px #ff69b4;
+        }
+
+        .gyaru-rainbow-text {
+            background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            filter: drop-shadow(2px 2px 0px #fff) drop-shadow(0px 0px 5px rgba(255,255,255,0.8));
+        }
+
+        .gyaru-button {
+            background: linear-gradient(180deg, #ff99cc 0%, #ff1493 100%);
+            border: 4px dashed #fff;
+            box-shadow: 0 6px 0 #c70066, 0 10px 15px rgba(255, 20, 147, 0.5);
+            color: white;
+            text-shadow: 2px 2px 0px #e60073;
+            border-radius: 30px;
+            transition: all 0.1s;
+        }
+        .gyaru-button:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #c70066, 0 4px 5px rgba(255, 20, 147, 0.5);
+        }
+
+        .gyaru-box {
+            background: #fff0f5;
+            border: 3px solid #ff69b4;
+            border-radius: 20px;
+            color: #d10068;
+        }
+
+        /* Custom scrollbar for panels so they don't look ugly if they scroll */
+        .gyaru-panel::-webkit-scrollbar {
+            width: 10px;
+        }
+        .gyaru-panel::-webkit-scrollbar-track {
+            background: rgba(255, 192, 203, 0.4);
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .gyaru-panel::-webkit-scrollbar-thumb {
+            background: #ff1493;
+            border-radius: 10px;
+            border: 2px solid #fff0f5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas Layer -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay Layer -->
+    <div id="uiContainer" class="ui-layer">
+        
+        <!-- Start Menu Screen -->
+        <div id="startScreen" class="screen active flex-col items-center pointer-events-auto bg-leopard gyaru-panel p-6 md:p-8 text-center max-w-2xl w-[95%] max-h-[95vh] overflow-y-auto mx-auto my-auto">
+            <h1 class="text-4xl md:text-6xl gyaru-title mt-2">✨ Salmon Type-Up! ✨</h1>
+            <p class="text-xl md:text-2xl gyaru-rainbow-text mb-4">Journey to Level 7 & Ascend! 💎</p>
+            
+            <div class="flex flex-col gap-2 mb-4 text-sm md:text-base font-bold gyaru-box p-4 w-full shadow-md text-left">
+                <p>💅 <b>Typing Phase:</b> Type letters quickly to jump up rocks.</p>
+                <p>🎀 <b>River Dash:</b> <b>Left/Right Arrows</b> to steer, <b>Spacebar</b> to jump.</p>
+                <p>✨ <b>Pro Tips:</b> Land on logs to Grind! Grab 🌿 Wasabi for Spicy Power!</p>
+            </div>
+            <h3 class="text-2xl md:text-3xl gyaru-text mb-3">Choose your Bestie:</h3>
+            <div class="flex flex-wrap gap-2 md:gap-4 justify-center mb-6">
+                <button id="charBtn_salmon" onclick="selectCharacter('salmon')" class="char-btn px-3 py-2 bg-pink-100 rounded-3xl text-lg md:text-xl font-bold border-4 border-pink-500 hover:scale-105 transition-all shadow-md">🐟 Salmon</button>
+                <button id="charBtn_turtle" onclick="selectCharacter('turtle')" class="char-btn px-3 py-2 bg-pink-100 rounded-3xl text-lg md:text-xl font-bold border-4 border-transparent hover:scale-105 transition-all shadow-md">🐢 Turtle</button>
+                <button id="charBtn_frog" onclick="selectCharacter('frog')" class="char-btn px-3 py-2 bg-pink-100 rounded-3xl text-lg md:text-xl font-bold border-4 border-transparent hover:scale-105 transition-all shadow-md">🐸 Frog</button>
+                <button id="charBtn_beaver" onclick="selectCharacter('beaver')" class="char-btn px-3 py-2 bg-pink-100 rounded-3xl text-lg md:text-xl font-bold border-4 border-transparent hover:scale-105 transition-all shadow-md">🦫 Beaver</button>
+            </div>
+
+            <h3 class="text-2xl md:text-3xl gyaru-text mb-3">Select Difficulty:</h3>
+            <div class="flex flex-wrap gap-2 md:gap-4 justify-center mb-2">
+                <button onclick="initGame('easy')" class="px-4 py-2 gyaru-button text-lg font-bold font-display">EASY 💖</button>
+                <button onclick="initGame('medium')" class="px-4 py-2 gyaru-button text-lg font-bold font-display">MEDIUM 🔥</button>
+                <button onclick="initGame('hard')" class="px-4 py-2 gyaru-button text-lg font-bold font-display">HARD 💀</button>
+            </div>
+
+            <div class="mt-4 border-t-4 border-dashed border-pink-300 w-full pt-4">
+                <h3 class="text-xl md:text-2xl gyaru-text mb-2">Custom Music? 🎵</h3>
+                <input type="file" id="customAudioInput" accept="audio/*" class="hidden" onchange="handleAudioUpload(event)">
+                <button onclick="document.getElementById('customAudioInput').click()" id="uploadBtnText" class="px-4 py-2 bg-white border-4 border-pink-400 text-pink-500 rounded-3xl text-sm md:text-base font-bold shadow-[0_4px_0_#ff69b4] hover:translate-y-1 hover:shadow-[0_1px_0_#ff69b4] transition-all font-display">
+                    UPLOAD YOUR OWN BANGER ✨
+                </button>
+            </div>
+        </div>
+
+        <!-- Typing HUD -->
+        <div id="hudScreen" class="screen absolute top-0 left-0 w-full h-full flex-col justify-between pointer-events-none p-6">
+            <div class="flex justify-between items-start w-full max-w-4xl mx-auto">
+                <div class="bg-white/90 backdrop-blur px-6 py-3 rounded-full border-4 border-pink-400 shadow-[0_0_15px_#ff69b4]">
+                    <span class="text-pink-500 uppercase tracking-widest text-sm font-bold block mb-1">Level</span>
+                    <span class="text-4xl font-display text-pink-600"><span id="levelDisplay">1</span><span class="text-2xl text-pink-300">/7</span></span>
+                </div>
+            </div>
+            <div class="flex flex-col items-center mb-16 w-full">
+                <div id="sequenceDisplay" class="text-4xl md:text-5xl font-display tracking-wider mb-4 flex flex-wrap justify-center gap-2 drop-shadow-[0_2px_5px_rgba(255,105,180,0.8)]"></div>
+                <div class="progress-container shadow-[0_0_15px_#ff69b4] border-2 border-pink-300 hidden">
+                    <div id="timerBar" class="progress-bar w-full"></div>
+                </div>
+                <p id="timerText" class="mt-2 text-white font-bold font-mono text-2xl hidden" style="text-shadow: 2px 2px 0 #ff1493, -2px -2px 0 #ff1493, 2px -2px 0 #ff1493, -2px 2px 0 #ff1493;">30.0s</p>
+            </div>
+        </div>
+
+        <!-- Level Complete Screen -->
+        <div id="levelCompleteScreen" class="screen flex-col items-center pointer-events-auto bg-leopard gyaru-panel p-6 md:p-10 text-center max-w-lg w-[95%] max-h-[95vh] overflow-y-auto mx-auto">
+            <h2 class="text-4xl md:text-5xl text-pink-500 mb-4 gyaru-title">Rocks Cleared! 💅</h2>
+            <p class="text-xl md:text-2xl text-pink-600 font-bold mb-4">Get ready for the River Dash! Dodge obstacles!</p>
+            <div class="gyaru-box p-4 mb-6 w-full shadow-sm">
+                <p class="text-lg md:text-xl text-pink-500 font-bold mb-3">⬅️ ➡️ Steer | SPACE to Jump</p>
+                <div class="flex flex-wrap justify-center gap-2 md:gap-4 text-sm md:text-md font-bold text-pink-700">
+                    <span class="bg-white border-2 border-pink-300 px-3 py-1 rounded-full shadow-sm whitespace-nowrap">🌿 Wasabi Power</span>
+                    <span class="bg-white border-2 border-pink-300 px-3 py-1 rounded-full shadow-sm whitespace-nowrap">🛹 Grind Logs</span>
+                </div>
+            </div>
+            <button onclick="startMinigame()" class="px-6 py-3 md:px-8 md:py-4 gyaru-button text-xl md:text-2xl font-display">
+                ENTER RIVER DASH ✨
+            </button>
+        </div>
+
+        <!-- Minigame HUD -->
+        <div id="minigameHudScreen" class="screen absolute top-0 left-0 w-full h-full flex-col pointer-events-none p-6 items-center">
+            <h2 class="text-5xl gyaru-title mb-2">RIVER DASH!</h2>
+            <div class="bg-white/90 px-8 py-4 rounded-full border-4 border-pink-400 shadow-[0_0_20px_#ff1493]">
+                <span id="mgTimerText" class="text-5xl font-mono text-pink-500 font-bold drop-shadow-sm">60.0s</span>
+            </div>
+            <div id="comboContainer" class="mt-6 text-6xl font-display text-yellow-300 opacity-0 drop-shadow-[0_4px_0_#ff1493]">COMBO x<span id="comboText">1</span></div>
+            <div id="rainbowText" class="mt-2 text-5xl gyaru-rainbow-text opacity-0 transition-opacity">WASABI RUSH! 🌿</div>
+        </div>
+
+        <!-- Minigame Result Screen -->
+        <div id="minigameResultScreen" class="screen flex-col items-center pointer-events-auto bg-leopard gyaru-panel p-6 md:p-10 text-center max-w-md w-[95%] max-h-[95vh] overflow-y-auto mx-auto">
+            <h2 id="mgResultTitle" class="text-4xl md:text-5xl mb-4 gyaru-title"></h2>
+            <p id="mgResultDesc" class="text-xl md:text-2xl text-pink-600 font-bold mb-8"></p>
+            <button onclick="startNextLevel()" class="px-6 py-3 md:px-8 md:py-4 gyaru-button text-xl md:text-2xl font-display">
+                NEXT LEVEL 💖
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen flex-col items-center pointer-events-auto bg-leopard gyaru-panel p-6 md:p-10 text-center max-w-md w-[95%] max-h-[95vh] overflow-y-auto mx-auto">
+            <h2 class="text-5xl md:text-6xl text-red-500 mb-2 gyaru-title">Washed Away! 😭</h2>
+            <p class="text-xl md:text-2xl text-pink-600 font-bold mb-6">The current was too strong...</p>
+            <div class="gyaru-box p-4 md:p-6 w-full mb-8 shadow-sm">
+                <p class="text-pink-400 text-xs md:text-sm uppercase tracking-widest mb-1 font-bold">You reached</p>
+                <p class="text-4xl md:text-5xl text-pink-500 font-display">Level <span id="finalLevelDisplay">1</span></p>
+            </div>
+            <div class="flex flex-wrap justify-center gap-3 md:gap-4">
+                <button onclick="resetGame()" class="px-4 py-3 md:px-6 md:py-4 gyaru-button text-lg md:text-xl font-display">TRY AGAIN 🔄</button>
+                <button onclick="returnToMenu()" class="px-4 py-3 md:px-6 md:py-4 bg-white border-4 border-pink-400 text-pink-500 rounded-3xl text-lg md:text-xl font-bold shadow-[0_6px_0_#ff69b4] hover:translate-y-1 hover:shadow-[0_2px_0_#ff69b4] transition-all font-display">MENU</button>
+            </div>
+        </div>
+
+        <!-- Ascension Finale Screen -->
+        <div id="ascensionScreen" class="screen flex-col items-center pointer-events-auto bg-leopard gyaru-panel p-6 md:p-10 text-center max-w-lg w-[95%] max-h-[95vh] overflow-y-auto mx-auto" style="border-color: #ffd700; box-shadow: 0 0 50px rgba(255,215,0,0.8);">
+            <h2 class="text-5xl md:text-7xl text-yellow-400 mb-4 gyaru-title animate-pulse" style="text-shadow: -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 3px 3px 0 #fff, -5px -5px 0 #ff8c00, 5px -5px 0 #ff8c00, -5px 5px 0 #ff8c00, 5px 5px 0 #ff8c00, 0 0 30px #ffd700;">VICTORY! ✨</h2>
+            <p class="text-xl md:text-2xl text-pink-600 font-bold mb-6">You conquered the waterfall, bestie!</p>
+            <p class="text-2xl md:text-3xl gyaru-rainbow-text mb-6">Time to Ascend! 🐉</p>
+            <button onclick="triggerAscension()" class="px-6 py-4 md:px-10 md:py-5 gyaru-button text-xl md:text-3xl font-display animate-bounce" style="background: linear-gradient(180deg, #ffd700 0%, #ff8c00 100%); border-color: #fff; box-shadow: 0 8px 0 #cc7000, 0 10px 20px rgba(255,140,0,0.6); text-shadow: 2px 2px 0px #995400;">
+                ASCEND TO DRAGON 💖
+            </button>
+            <button onclick="returnToMenu()" class="mt-4 md:mt-6 px-6 py-2 bg-white border-4 border-pink-400 text-pink-500 rounded-full text-lg font-bold hover:bg-pink-50 transition-all font-display">
+                Main Menu
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MAIN GAME SCRIPT -->
+    <script>
+        let state = {
+            difficulty: 'medium',
+            character: 'salmon',
+            currentLevel: 1,
+            maxTime: 30.0,
+            timeLeft: 30.0,
+            jumpsNeeded: 5,
+            currentJumpIndex: 0,
+            targetSequence: "",
+            typedSequence: "",
+            status: 'start', 
+            bonusTime: 0,
+            currentTrick: 0
+        };
+
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        // --- Tone.js Audio System ---
+        let audioSetup = false;
+        let skaLoop;
+        let customAudioElement = null;
+        let useCustomAudio = false;
+        let sfx = {
+            typeOk: null,
+            typeError: null,
+            jump: null,
+            splash: null,
+            crash: null,
+            levelUp: null,
+            grind: null
+        };
+
+        async function initAudio() {
+            if (audioSetup) return;
+            await Tone.start();
+
+            // Sound Effects using PolySynth to prevent overlapping note crashes
+            sfx.typeOk = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination();
+            sfx.typeOk.volume.value = -10;
+
+            sfx.typeError = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sawtooth" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 } }).toDestination();
+            sfx.typeError.volume.value = -12;
+
+            sfx.jump = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle" }, envelope: { attack: 0.05, decay: 0.3, sustain: 0, release: 0.2 } }).toDestination();
+            sfx.jump.volume.value = -8;
+
+            sfx.splash = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.05, decay: 0.4, sustain: 0 } }).toDestination();
+            sfx.splash.volume.value = -15;
+
+            sfx.crash = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.01, decay: 0.8, sustain: 0 } }).toDestination();
+            sfx.crash.volume.value = -5;
+
+            sfx.grind = new Tone.NoiseSynth({ noise: { type: "brown" }, envelope: { attack: 0.1, decay: 0.1, sustain: 1.0, release: 0.2 } }).toDestination();
+            sfx.grind.volume.value = -15;
+
+            sfx.levelUp = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "square" }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 1 } }).toDestination();
+            sfx.levelUp.volume.value = -10;
+
+            // Skate Punk Rock Music Generators
+            const dist = new Tone.Distortion(0.8).toDestination();
+            
+            const guitarSynth = new Tone.PolySynth(Tone.Synth, { 
+                oscillator: { type: "sawtooth" }, 
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 } 
+            }).connect(dist);
+            guitarSynth.volume.value = -16;
+
+            const rockBass = new Tone.FMSynth({ 
+                harmonicity: 1, modulationIndex: 2, 
+                oscillator: { type: "square" }, 
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } 
+            }).toDestination();
+            rockBass.volume.value = -8;
+
+            // Drum Kit Synths
+            const kick = new Tone.MembraneSynth().toDestination();
+            kick.volume.value = -2;
+            
+            const snare = new Tone.NoiseSynth({ 
+                noise: { type: 'white' }, 
+                envelope: { attack: 0.005, decay: 0.2, sustain: 0 } 
+            }).toDestination();
+            snare.volume.value = -10;
+
+            const hihat = new Tone.NoiseSynth({ 
+                noise: { type: 'white' }, 
+                envelope: { attack: 0.005, decay: 0.05, sustain: 0 } 
+            }).toDestination();
+            hihat.volume.value = -15;
+
+            // Expanded Skate Punk Song Structure (32 measures!)
+            const chords = {
+                G: { chord: ["G2", "D3", "G3"], bass: "G1" },
+                D: { chord: ["D2", "A2", "D3"], bass: "D1" },
+                E: { chord: ["E2", "B2", "E3"], bass: "E1" },
+                C: { chord: ["C2", "G2", "C3"], bass: "C1" }
+            };
+
+            const songStructure = [
+                // Verse 1 (Measures 0-7): Palm-muted, driving
+                chords.G, chords.G, chords.E, chords.C,
+                chords.G, chords.G, chords.E, chords.C,
+                // Chorus 1 (Measures 8-15): Wide open strumming
+                chords.G, chords.D, chords.E, chords.C,
+                chords.G, chords.D, chords.E, chords.C,
+                // Bridge (Measures 16-23): Syncopated punches, building tension
+                chords.E, chords.C, chords.G, chords.D,
+                chords.E, chords.C, chords.D, chords.D, // Hangs on D for the drum fill!
+                // Chorus 2 (Measures 24-31): Final loud chorus
+                chords.G, chords.D, chords.E, chords.C,
+                chords.G, chords.D, chords.E, chords.C
+            ];
+
+            let step = 0;
+            Tone.Transport.bpm.value = 175; // Fast skate tempo!
+
+            skaLoop = new Tone.Loop(time => {
+                let s = step % 16;
+                let measure = Math.floor(step / 16) % 32;
+                let currentRiff = songStructure[measure];
+
+                let isVerse = measure < 8;
+                let isBridge = measure >= 16 && measure < 24;
+                let isChorus = !isVerse && !isBridge; 
+
+                // --- DRUMS ---
+                if (measure === 23) {
+                    // Epic Drum Fill building into the final Chorus
+                    if (s % 2 === 0) kick.triggerAttackRelease("C1", "8n", time, 1.0);
+                    if (s % 2 === 0) snare.triggerAttackRelease("16n", time, 1.0);
+                    hihat.triggerAttackRelease("16n", time, 0.8);
+                } else if (isVerse) {
+                    // Straight 8th hi-hats, standard punk kick/snare
+                    if (s % 2 === 0) hihat.triggerAttackRelease("32n", time, 0.5);
+                    if (s === 0 || s === 8 || s === 10) kick.triggerAttackRelease("C1", "8n", time, 0.9);
+                    if (s === 4 || s === 12) snare.triggerAttackRelease("16n", time, 0.8);
+                } else if (isChorus) {
+                    // Washy cymbals (16ths), double kick
+                    hihat.triggerAttackRelease("16n", time, 0.6); 
+                    if (s === 0 || s === 6 || s === 8 || s === 10) kick.triggerAttackRelease("C1", "8n", time, 1.0);
+                    if (s === 4 || s === 12) snare.triggerAttackRelease("16n", time, 0.9);
+                } else if (isBridge) {
+                    // Syncopated heavy hits
+                    if (s % 4 === 0) hihat.triggerAttackRelease("16n", time, 0.6); 
+                    if (s === 0 || s === 3 || s === 8 || s === 11) kick.triggerAttackRelease("C1", "8n", time, 1.0);
+                    if (s === 4 || s === 12) snare.triggerAttackRelease("16n", time, 0.9);
+                }
+
+                // --- GUITARS & BASS ---
+                if (isVerse) {
+                    // Palm muted chugging (8th notes)
+                    if (s % 2 === 0) {
+                        let velocity = (s % 4 === 0) ? 0.7 : 0.4; // Accent downbeats
+                        guitarSynth.triggerAttackRelease(currentRiff.chord, "16n", time, velocity);
+                        rockBass.triggerAttackRelease(currentRiff.bass, "16n", time, velocity);
+                    }
+                } else if (isChorus) {
+                    // Open strumming rhythm pattern
+                    if (s === 0 || s === 4 || s === 7 || s === 10 || s === 12) {
+                        guitarSynth.triggerAttackRelease(currentRiff.chord, "8n", time, 1.0);
+                    }
+                    if (s % 2 === 0) { // Bass pumps steady 8ths
+                        rockBass.triggerAttackRelease(currentRiff.bass, "8n", time, 0.9);
+                    }
+                } else if (isBridge) {
+                    // Bridge: Syncopated punches mirroring the kick drum
+                    if (s === 0 || s === 3 || s === 8 || s === 11) {
+                        guitarSynth.triggerAttackRelease(currentRiff.chord, "4n", time, 1.0);
+                        rockBass.triggerAttackRelease(currentRiff.bass, "4n", time, 1.0);
+                    }
+                }
+                
+                step++;
+            }, "16n");
+
+            audioSetup = true;
+        }
+
+        function handleAudioUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (customAudioElement) {
+                    customAudioElement.pause();
+                }
+                const objectUrl = URL.createObjectURL(file);
+                customAudioElement = new Audio(objectUrl);
+                customAudioElement.loop = true;
+                customAudioElement.volume = 0.4; // Leave room for SFX
+                useCustomAudio = true;
+                document.getElementById('uploadBtnText').innerText = "TRACK LOADED 💖";
+            }
+        }
+
+        // Global Three.js & Game State Variables
+        let scene, camera, renderer;
+        let salmonGroup, salmonInner, tailMesh, swimmerParts = [];
+        let waterfallGroup;
+        let rockMeshes = [], rockPositions = [];
+        let activeObstacles = [], particles = [], foamLines = [];
+        let clock = new THREE.Clock();
+        let waterfallSlant = -Math.PI / 6;
+        let isJumping = false, jumpProgress = 0, jumpDuration = 0.5;
+        let isMgJumping = false, mgJumpProgress = 0, mgJumpDuration = 0.8;
+        let startPos = new THREE.Vector3(), targetPos = new THREE.Vector3();
+        let mouseX = 0, mouseY = 0;
+
+        let mgState = {
+            timeLeft: 60.0, nextSpawn: 1.0, dodgedCount: 0, rushMultiplier: 1.0,
+            jumpHeight: 4.0, jumpStartOffset: 0.0, combo: 0, maxCombo: 0,
+            rainbowTime: 0.0, isGrinding: false, grindTarget: null
+        };
+        let mgKeys = { left: false, right: false };
+
+        function playSfx(name) {
+            if (!audioSetup) return;
+            const now = Tone.now();
+            switch(name) {
+                case 'ok': if(sfx.typeOk) sfx.typeOk.triggerAttackRelease("C5", "16n", now); break;
+                case 'error': if(sfx.typeError) sfx.typeError.triggerAttackRelease(["C3", "G2"], "8n", now); break;
+                case 'jump': if(sfx.jump) sfx.jump.triggerAttackRelease("C4", "16n", now); break;
+                case 'splash': if(sfx.splash) sfx.splash.triggerAttackRelease("16n", now); break;
+                case 'crash': if(sfx.crash) sfx.crash.triggerAttackRelease("8n", now); break;
+                case 'grind': if(sfx.grind) sfx.grind.triggerAttackRelease("16n", now); break;
+                case 'levelup': if(sfx.levelUp) sfx.levelUp.triggerAttackRelease(["C4", "E4", "G4"], "4n", now); break;
+                case 'ascend': if(sfx.levelUp) sfx.levelUp.triggerAttackRelease(["C4", "E4", "G4", "C5", "E5"], "2n", now); break;
+            }
+        }
+
+        window.onload = function() {
+            const canvas = document.getElementById('gameCanvas');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, -10, 15);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            dirLight.position.set(20, 50, 40); 
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            const sun = new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({color: 0xfffcd4}));
+            sun.position.set(40, 250, -80);
+            scene.add(sun);
+
+            createSky();
+
+            waterfallGroup = new THREE.Group();
+            waterfallGroup.rotation.x = waterfallSlant;
+            scene.add(waterfallGroup);
+
+            const wfGeo = new THREE.PlaneGeometry(120, 500); 
+            const wfMat = new THREE.MeshLambertMaterial({ color: 0x0284c7 });
+            const waterfall = new THREE.Mesh(wfGeo, wfMat);
+            waterfall.position.z = -2;
+            waterfall.receiveShadow = true;
+            waterfallGroup.add(waterfall);
+
+            const foamGeo = new THREE.PlaneGeometry(0.5, 3);
+            const foamMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.5 });
+            for(let i=0; i<80; i++) {
+                let foam = new THREE.Mesh(foamGeo, foamMat);
+                foam.position.set((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 200, -1.9);
+                foam.userData = { speed: Math.random() * 15 + 10 };
+                waterfallGroup.add(foam);
+                foamLines.push(foam);
+            }
+
+            createCharacter(state.character);
+
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            
+            gameLoop();
+        }
+
+        function createSky() {
+            const cloudGeo = new THREE.SphereGeometry(2, 8, 8);
+            const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.95});
+            for(let i=0; i<30; i++) {
+                const cloud = new THREE.Group();
+                const numPuffs = 4 + Math.floor(Math.random() * 4);
+                for(let j=0; j<numPuffs; j++) {
+                    const c = new THREE.Mesh(cloudGeo, cloudMat);
+                    c.position.set(Math.random()*6-3, Math.random()*2-1, Math.random()*6-3);
+                    c.scale.set(Math.random()*2+1, Math.random()*1.5+0.5, Math.random()*2+1);
+                    cloud.add(c);
+                }
+                cloud.position.set((Math.random() - 0.5) * 250, Math.random() * 200 + 80, Math.random() * -100 - 40);
+                scene.add(cloud);
+            }
+        }
+
+        function selectCharacter(char) {
+            state.character = char;
+            document.querySelectorAll('.char-btn').forEach(btn => {
+                btn.classList.replace('border-pink-500', 'border-transparent');
+            });
+            document.getElementById('charBtn_' + char).classList.replace('border-transparent', 'border-pink-500');
+            createCharacter(char);
+        }
+
+        function createCharacter(type) {
+            if(salmonGroup) scene.remove(salmonGroup);
+            
+            salmonGroup = new THREE.Group();
+            salmonGroup.up.set(0, 0, 1); 
+
+            salmonInner = new THREE.Group();
+            salmonInner.rotation.y = -Math.PI / 2;
+
+            swimmerParts = [];
+
+            if (type === 'salmon') {
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff7e67 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 16).rotateZ(Math.PI / 2), bodyMat);
+                body.castShadow = true; salmonInner.add(body);
+
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), bodyMat);
+                head.position.set(0.6, 0, 0); head.castShadow = true; salmonInner.add(head);
+
+                const rear = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), bodyMat);
+                rear.position.set(-0.6, 0, 0); rear.castShadow = true; salmonInner.add(rear);
+
+                tailMesh = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 4).rotateZ(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xf0544f }));
+                tailMesh.position.set(-1.2, 0, 0); salmonInner.add(tailMesh);
+                swimmerParts.push({mesh: tailMesh, type: 'tail'});
+
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                
+                const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), eyeMat); rightEye.position.set(0.4, 0.4, 0.4);
+                const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08), pupilMat); rightPupil.position.set(0.45, 0.45, 0.45);
+                const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), eyeMat); leftEye.position.set(0.4, 0.4, -0.4);
+                const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08), pupilMat); leftPupil.position.set(0.45, 0.45, -0.45);
+
+                salmonInner.add(rightEye); salmonInner.add(rightPupil);
+                salmonInner.add(leftEye); salmonInner.add(leftPupil);
+            } 
+            else if (type === 'turtle') {
+                const shellMat = new THREE.MeshStandardMaterial({ color: 0x145c29, roughness: 0.9 });
+                const skinMat = new THREE.MeshStandardMaterial({ color: 0x4ade80 });
+                
+                const shell = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 16), shellMat);
+                shell.scale.set(1, 0.6, 1.1);
+                shell.castShadow = true; salmonInner.add(shell);
+
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), skinMat);
+                head.position.set(1.0, 0, 0); head.castShadow = true; salmonInner.add(head);
+
+                const flipperGeo = new THREE.SphereGeometry(0.3, 16, 16);
+                const flippers = [
+                    {pos: [0.7, -0.2, 0.8], sign: 1}, {pos: [0.7, -0.2, -0.8], sign: -1},
+                    {pos: [-0.7, -0.2, 0.7], sign: 1}, {pos: [-0.7, -0.2, -0.7], sign: -1}
+                ];
+                flippers.forEach(f => {
+                    const flip = new THREE.Mesh(flipperGeo, skinMat);
+                    flip.scale.set(1.5, 0.3, 1); flip.position.set(...f.pos);
+                    salmonInner.add(flip);
+                    swimmerParts.push({mesh: flip, type: 'flipper', sign: f.sign});
+                });
+
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat); rightEye.position.set(1.2, 0.2, 0.25);
+                const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.05), pupilMat); rightPupil.position.set(1.25, 0.25, 0.3);
+                const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat); leftEye.position.set(1.2, 0.2, -0.25);
+                const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.05), pupilMat); leftPupil.position.set(1.25, 0.25, -0.3);
+                salmonInner.add(rightEye, rightPupil, leftEye, leftPupil);
+            }
+            else if (type === 'frog') {
+                const skinMat = new THREE.MeshStandardMaterial({ color: 0x22c55e });
+                const bellyMat = new THREE.MeshStandardMaterial({ color: 0xbbf7d0 });
+
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), skinMat);
+                body.scale.set(1, 0.8, 1); body.castShadow = true; salmonInner.add(body);
+
+                const belly = new THREE.Mesh(new THREE.SphereGeometry(0.81, 16, 16, 0, Math.PI * 2, Math.PI/2, Math.PI/2), bellyMat);
+                belly.scale.set(0.95, 0.8, 0.95); salmonInner.add(belly);
+
+                const eyeBulgeGeo = new THREE.SphereGeometry(0.3, 16, 16);
+                const rightBulge = new THREE.Mesh(eyeBulgeGeo, skinMat); rightBulge.position.set(0.5, 0.6, 0.4);
+                const leftBulge = new THREE.Mesh(eyeBulgeGeo, skinMat); leftBulge.position.set(0.5, 0.6, -0.4);
+                salmonInner.add(rightBulge, leftBulge);
+
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), eyeMat); rightEye.position.set(0.55, 0.7, 0.4);
+                const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08), pupilMat); rightPupil.position.set(0.65, 0.75, 0.45);
+                const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), eyeMat); leftEye.position.set(0.55, 0.7, -0.4);
+                const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08), pupilMat); leftPupil.position.set(0.65, 0.75, -0.45);
+                salmonInner.add(rightEye, rightPupil, leftEye, leftPupil);
+
+                const legGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+                const rightLeg = new THREE.Mesh(legGeo, skinMat); rightLeg.position.set(-0.5, -0.2, 0.7); rightLeg.rotation.x = Math.PI/4;
+                const leftLeg = new THREE.Mesh(legGeo, skinMat); leftLeg.position.set(-0.5, -0.2, -0.7); leftLeg.rotation.x = -Math.PI/4;
+                salmonInner.add(rightLeg, leftLeg);
+                swimmerParts.push({mesh: rightLeg, type: 'leg', sign: 1}, {mesh: leftLeg, type: 'leg', sign: -1});
+            }
+            else if (type === 'beaver') {
+                const furMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 });
+                const tailMat = new THREE.MeshStandardMaterial({ color: 0x3b2f2f, roughness: 1.0 });
+                const toothMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 16).rotateZ(Math.PI / 2), furMat);
+                body.castShadow = true; salmonInner.add(body);
+
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), furMat);
+                head.position.set(0.7, 0, 0); head.castShadow = true; salmonInner.add(head);
+
+                const rightEar = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), furMat); rightEar.position.set(0.6, 0.5, 0.4);
+                const leftEar = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), furMat); leftEar.position.set(0.6, 0.5, -0.4);
+                salmonInner.add(rightEar, leftEar);
+
+                const rightTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), toothMat); rightTooth.position.set(1.28, -0.1, 0.06);
+                const leftTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), toothMat); leftTooth.position.set(1.28, -0.1, -0.06);
+                salmonInner.add(rightTooth, leftTooth);
+
+                const tailGroup = new THREE.Group();
+                tailGroup.position.set(-0.6, 0, 0);
+                tailMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.6), tailMat);
+                tailMesh.position.set(-0.4, 0, 0); 
+                tailGroup.add(tailMesh);
+                salmonInner.add(tailGroup);
+                swimmerParts.push({mesh: tailGroup, type: 'beaverTail'});
+
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), eyeMat); rightEye.position.set(1.0, 0.3, 0.3);
+                const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06), pupilMat); rightPupil.position.set(1.08, 0.34, 0.34);
+                const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), eyeMat); leftEye.position.set(1.0, 0.3, -0.3);
+                const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06), pupilMat); leftPupil.position.set(1.08, 0.34, -0.34);
+                salmonInner.add(rightEye, rightPupil, leftEye, leftPupil);
+                
+                const pawGeo = new THREE.SphereGeometry(0.2, 8, 8);
+                const paws = [
+                    {pos: [0.6, -0.4, 0.5], sign: 1}, {pos: [0.6, -0.4, -0.5], sign: -1},
+                    {pos: [-0.4, -0.4, 0.5], sign: 1}, {pos: [-0.4, -0.4, -0.5], sign: -1}
+                ];
+                paws.forEach(p => {
+                    const paw = new THREE.Mesh(pawGeo, tailMat);
+                    paw.position.set(...p.pos);
+                    salmonInner.add(paw);
+                    swimmerParts.push({mesh: paw, type: 'flipper', sign: p.sign});
+                });
+            }
+
+            salmonGroup.add(salmonInner);
+            scene.add(salmonGroup);
+        }
+
+        function createBearPaw() {
+            const pawGroup = new THREE.Group();
+            const brownMat = new THREE.MeshStandardMaterial({color: 0x6b4423, roughness: 1.0}); 
+            const clawMat = new THREE.MeshStandardMaterial({color: 0xffffff, roughness: 0.2});
+            
+            const arm = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, 15), brownMat);
+            arm.position.y = 7.5; 
+            pawGroup.add(arm);
+            
+            const paw = new THREE.Mesh(new THREE.SphereGeometry(2.5), brownMat);
+            paw.scale.set(1.2, 0.8, 1.2);
+            pawGroup.add(paw);
+            
+            for(let i=0; i<4; i++) {
+                const claw = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.5, 8), clawMat);
+                claw.rotation.x = Math.PI; 
+                claw.position.set(-1.2 + i*0.8, -1.5, 1.5);
+                pawGroup.add(claw);
+            }
+            return pawGroup;
+        }
+
+        // --- STREAMING_CHUNK: Typing Phase Logic ---
+
+        function calculateRocks() {
+            rockMeshes.forEach(mesh => scene.remove(mesh));
+            rockMeshes = [];
+            rockPositions = [];
+
+            const yStep = 4;
+            let currentY = -5;
+
+            for (let i = 0; i <= state.jumpsNeeded; i++) {
+                let rX = 0;
+                if (i !== 0 && i !== state.jumpsNeeded) {
+                    rX = (i % 2 === 0 ? 3 : -3) + (Math.random() * 2 - 1);
+                }
+                
+                let slantZ = (currentY * Math.tan(waterfallSlant)) - 1.0;
+                let pos = new THREE.Vector3(rX, currentY, slantZ);
+                rockPositions.push(pos);
+
+                const rockGeo = new THREE.DodecahedronGeometry(1.2 + Math.random() * 0.5);
+                const rockMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9 });
+                const rock = new THREE.Mesh(rockGeo, rockMat);
+                rock.position.copy(pos);
+                
+                // FIXED: Lower the rock significantly and push it slightly into the waterfall 
+                // so the character rests clearly on top of it instead of clipping inside it.
+                rock.position.y -= 2.5;
+                rock.position.z -= 1.5;
+                
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                
+                scene.add(rock);
+                rockMeshes.push(rock);
+                currentY += yStep;
+            }
+        }
+
+        function createSplash(pos) {
+            const particleGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const particleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for(let i=0; i<15; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), particleMat);
+                p.position.copy(pos); p.position.y -= 0.5;
+                p.userData = { vx: (Math.random()-0.5)*10, vy: Math.random()*10+5, vz: (Math.random()-0.5)*10, life: 1.0 };
+                scene.add(p); particles.push(p);
+            }
+        }
+
+        function createSparks(pos) {
+            if(Math.random() > 0.4) return;
+            const particleMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+            for(let i=0; i<2; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), particleMat);
+                p.position.copy(pos);
+                p.userData = { vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, vz: Math.random()*15, life: 0.6 };
+                scene.add(p); particles.push(p);
+            }
+        }
+
+        function applyTrickRotation(p, trickIndex) {
+            let tx = 0, ty = 0, tz = 0;
+            switch(trickIndex) {
+                case 0: tx = p * Math.PI * 2; break; // Front flip
+                case 1: tx = -p * Math.PI * 2; break; // Back flip
+                case 2: tz = p * Math.PI * 2; break; // Roll left
+                case 3: tz = -p * Math.PI * 2; break; // Roll right
+                case 4: tx = p * Math.PI * 4; break; // Double front
+                case 5: tx = -p * Math.PI * 4; break; // Double back
+                case 6: tz = p * Math.PI * 4; break; // Double roll
+                case 7: ty = p * Math.PI * 2; break; // 360 Spin
+                case 8: tx = p * Math.PI * 2; tz = p * Math.PI * 2; break; // Corkscrew
+                case 9: tx = -p * Math.PI * 2; tz = -p * Math.PI * 2; break; // Reverse Corkscrew
+                case 10: ty = p * Math.PI * 4; break; // 720 Spin
+                case 11: tx = p * Math.PI * 2; ty = p * Math.PI * 2; break; // Side flip
+                case 12: tz = p * Math.PI * 6; break; // Sonic roll
+                case 13: ty = Math.sin(p * Math.PI * 6) * 0.5; break; // Wiggle shake
+                case 14: tx = p * Math.PI * 4; tz = p * Math.PI * 4; break; // 1440 Cork
+                case 15: ty = p * Math.PI * 8; break; // Grind Exit Trick: 4 Quick 360 Spins
+            }
+            salmonInner.rotation.set(tx, -Math.PI / 2 + ty, tz);
+        }
+
+        function calculateLevelTime(level) {
+            let base = state.difficulty === 'easy' ? 50.0 : state.difficulty === 'hard' ? 35.0 : 45.0;
+            let time = base - ((level - 1) * 2.5);
+            return Math.max(12.0, time) + state.bonusTime;
+        }
+
+        function getSequenceLength(level) {
+            let base = state.difficulty === 'easy' ? 0 : state.difficulty === 'hard' ? 3 : 1;
+            return Math.min(level + base, 8); 
+        }
+
+        function generateSequence() {
+            let length = getSequenceLength(state.currentLevel);
+            state.targetSequence = ""; state.typedSequence = "";
+            for(let i=0; i<length; i++) state.targetSequence += alphabet[Math.floor(Math.random() * alphabet.length)];
+            updateSequenceUI();
+        }
+
+        function updateSequenceUI() {
+            const container = document.getElementById('sequenceDisplay');
+            container.innerHTML = '';
+            for(let i=0; i<state.targetSequence.length; i++) {
+                const span = document.createElement('span');
+                span.innerText = state.targetSequence[i];
+                span.className = 'key-box font-mono font-bold';
+                if (i < state.typedSequence.length) span.classList.add('key-typed');
+                container.appendChild(span);
+            }
+        }
+
+        function updateTimerUI() {
+            const bar = document.getElementById('timerBar');
+            const text = document.getElementById('timerText');
+            let percent = (state.timeLeft / state.maxTime) * 100;
+            bar.style.width = `${Math.max(0, percent)}%`;
+            text.innerText = `${Math.max(0, state.timeLeft).toFixed(1)}s`;
+
+            if (percent > 50) bar.style.backgroundColor = '#ff69b4'; // Hot Pink
+            else if (percent > 20) bar.style.backgroundColor = '#ffb6c1'; // Light Pink
+            else bar.style.backgroundColor = '#ff1493'; // Deep Pink
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            if(screenId) document.getElementById(screenId).classList.add('active');
+        }
+
+        function returnToMenu() {
+            if(skaLoop) skaLoop.stop();
+            if(customAudioElement) customAudioElement.pause();
+            showScreen('startScreen');
+        }
+
+        async function initGame(diff) {
+            await initAudio();
+            Tone.Transport.start();
+            
+            // Handle Music Choice
+            if (useCustomAudio && customAudioElement) {
+                if(skaLoop.state === "started") skaLoop.stop();
+                customAudioElement.currentTime = 0;
+                customAudioElement.play().catch(e => console.log("Audio playback blocked", e));
+            } else {
+                if(skaLoop.state !== "started") skaLoop.start(0);
+            }
+
+            state.difficulty = diff;
+            state.currentLevel = 1;
+            state.bonusTime = 0;
+            
+            // Revert Dragon changes or character swaps if playing again
+            createCharacter(state.character); 
+            
+            setupLevel();
+        }
+
+        function setupLevel() {
+            state.maxTime = calculateLevelTime(state.currentLevel);
+            state.timeLeft = state.maxTime;
+            state.jumpsNeeded = 10 + state.currentLevel;
+            state.currentJumpIndex = 0;
+            state.bonusTime = 0; 
+            
+            document.getElementById('levelDisplay').innerText = state.currentLevel;
+            
+            calculateRocks();
+            salmonGroup.position.copy(rockPositions[0]);
+            isJumping = false;
+            salmonInner.rotation.set(0, -Math.PI / 2, 0);
+            camera.position.y = salmonGroup.position.y;
+            
+            generateSequence();
+            state.status = 'playing';
+            showScreen('hudScreen');
+            clock.getDelta();
+        }
+
+        function triggerTypingJump() {
+            state.currentJumpIndex++;
+            targetPos.copy(rockPositions[state.currentJumpIndex]);
+            startPos.copy(salmonGroup.position);
+            
+            isJumping = true; jumpProgress = 0;
+            state.currentTrick = Math.floor(Math.random() * 15);
+            playSfx('jump');
+            createSplash(startPos);
+            document.getElementById('sequenceDisplay').innerHTML = '';
+        }
+
+        function levelComplete() {
+            state.status = 'transition';
+            playSfx('levelup');
+            showScreen('levelCompleteScreen');
+        }
+
+        function gameOver() {
+            state.status = 'gameover';
+            document.getElementById('finalLevelDisplay').innerText = state.currentLevel;
+            showScreen('gameOverScreen');
+        }
+
+        function resetGame() { initGame(state.difficulty); }
+
+        function startMinigame() {
+            state.status = 'minigame';
+            mgState.timeLeft = 60.0; mgState.nextSpawn = 1.0;
+            mgState.dodgedCount = 0; mgState.rushMultiplier = 1.0;
+            mgState.jumpHeight = 4.0; mgState.jumpStartOffset = 0.0;
+            mgState.combo = 0; mgState.maxCombo = 0;
+            mgState.rainbowTime = 0.0; mgState.isGrinding = false;
+            
+            mgKeys.left = false; mgKeys.right = false; isMgJumping = false;
+            
+            document.getElementById('rainbowText').style.opacity = 0;
+            updateComboUI();
+
+            rockMeshes.forEach(mesh => scene.remove(mesh)); rockMeshes = [];
+            activeObstacles.forEach(obs => scene.remove(obs)); activeObstacles = [];
+
+            salmonGroup.position.set(0, camera.position.y + 10, 0); 
+            salmonGroup.position.z = (salmonGroup.position.y * Math.tan(waterfallSlant));
+            salmonInner.rotation.set(0, -Math.PI / 2, 0);
+
+            showScreen('minigameHudScreen');
+            clock.getDelta();
+        }
+
+        function spawnObstacle() {
+            let rand = Math.random();
+            let type = 'log', radius = 1.2, length = 0;
+            
+            let baseSpeed = state.difficulty === 'easy' ? 15 : state.difficulty === 'hard' ? 35 : 25;
+            let speed = (baseSpeed + (state.currentLevel * 3)) * mgState.rushMultiplier;
+            
+            // Wasabi is 20% spawn rate
+            if (rand > 0.85) type = 'bear'; 
+            else if (rand > 0.70) type = 'grind_log';
+            else if (rand > 0.55) type = 'rock';
+            else if (rand > 0.40) type = 'egg';
+            else if (rand > 0.20) type = 'wasabi';
+            else type = 'log';
+
+            let mesh;
+            if (type === 'log') {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 4, 8), new THREE.MeshStandardMaterial({color: 0x5c4033}));
+                mesh.rotation.z = Math.PI / 2; mesh.position.x = (Math.random() - 0.5) * 20; 
+            } else if (type === 'grind_log') {
+                length = 20; radius = 1.5;
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, length, 8), new THREE.MeshStandardMaterial({color: 0x8b5a2b}));
+                mesh.position.x = (Math.random() - 0.5) * 16;
+            } else if (type === 'rock') {
+                mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5), new THREE.MeshStandardMaterial({color: 0x666666, roughness: 0.8}));
+                mesh.position.x = (Math.random() - 0.5) * 20; radius = 1.5;
+            } else if (type === 'egg') {
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(1.0, 16, 16), new THREE.MeshStandardMaterial({color: 0xffe4c4, roughness: 0.4})); 
+                mesh.scale.set(1, 1.4, 1); mesh.position.x = (Math.random() - 0.5) * 20; radius = 1.2;
+            } else if (type === 'wasabi') {
+                mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8, 1), new THREE.MeshStandardMaterial({color: 0x84cc16, emissive: 0x4ade80, emissiveIntensity: 0.4, roughness: 0.9}));
+                mesh.scale.set(0.6, 1.5, 0.6); mesh.position.x = (Math.random() - 0.5) * 20; radius = 1.5;
+            } else if (type === 'bear') {
+                mesh = createBearPaw();
+                mesh.position.x = salmonGroup.position.x + (Math.random() * 6 - 3); 
+                mesh.userData.isSmashing = true; radius = 3.0; speed = speed * 0.9;
+            }
+
+            mesh.position.y = salmonGroup.position.y + 70 + (20 * mgState.rushMultiplier); 
+            
+            if (type === 'bear') {
+                mesh.position.z = mesh.position.y * Math.tan(waterfallSlant) + 40;
+                mesh.userData.smashZSpeed = 50 * mgState.rushMultiplier;
+            } else if (type === 'wasabi') {
+                mesh.position.z = mesh.position.y * Math.tan(waterfallSlant) + 2.0; 
+            } else {
+                mesh.position.z = mesh.position.y * Math.tan(waterfallSlant);
+            }
+            
+            mesh.userData = { type, speed, radius, length, cleared: false };
+            mesh.castShadow = true;
+            scene.add(mesh); activeObstacles.push(mesh);
+        }
+
+        function updateComboUI() {
+            const container = document.getElementById('comboContainer');
+            const text = document.getElementById('comboText');
+            if (mgState.combo > mgState.maxCombo) mgState.maxCombo = mgState.combo;
+            
+            if (mgState.combo > 0) {
+                text.innerText = mgState.combo;
+                container.style.opacity = 1;
+                container.classList.remove('animate-pop');
+                void container.offsetWidth; 
+                container.classList.add('animate-pop');
+            } else {
+                container.style.opacity = 0;
+            }
+        }
+
+        function endMinigame(won) {
+            state.status = 'transition';
+            activeObstacles.forEach(obs => scene.remove(obs)); activeObstacles = [];
+            
+            if (won && state.currentLevel === 7) {
+                showScreen('ascensionScreen');
+                playSfx('levelup');
+                return;
+            }
+
+            const title = document.getElementById('mgResultTitle');
+            const desc = document.getElementById('mgResultDesc');
+            const screen = document.getElementById('minigameResultScreen');
+
+            if (won) {
+                playSfx('levelup');
+                let comboBonus = mgState.maxCombo * 2.0;
+                state.bonusTime = 10.0 + comboBonus;
+                title.innerText = "Survived!"; title.className = "text-5xl mb-4 font-display text-green-400";
+                desc.innerText = `Great dodging! +10s base bonus. +${comboBonus}s combo bonus!`;
+                screen.classList.replace('border-red-500', 'border-green-500');
+                if(!screen.classList.contains('border-green-500')) screen.classList.add('border-green-500');
+            } else {
+                playSfx('crash');
+                state.bonusTime = 0.0;
+                title.innerText = "Ouch!"; title.className = "text-5xl mb-4 font-display text-red-500";
+                desc.innerText = "You hit an obstacle! No bonus time earned.";
+                screen.classList.replace('border-green-500', 'border-red-500');
+                if(!screen.classList.contains('border-red-500')) screen.classList.add('border-red-500');
+            }
+            showScreen('minigameResultScreen');
+        }
+
+        function startNextLevel() {
+            state.currentLevel++;
+            setupLevel();
+        }
+
+        function triggerAscension() {
+            state.status = 'ascension';
+            playSfx('ascend');
+            showScreen(''); 
+            
+            // Morph into dragon
+            salmonInner.children.forEach(c => c.material.color.setHex(0xfacc15)); // Gold body
+            
+            // Add Wings
+            const wingGeo = new THREE.PlaneGeometry(6, 4);
+            const wingMat = new THREE.MeshBasicMaterial({color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.8});
+            const leftWing = new THREE.Mesh(wingGeo, wingMat); leftWing.position.set(0, 0.5, -1); leftWing.rotation.x = Math.PI/2;
+            const rightWing = new THREE.Mesh(wingGeo, wingMat); rightWing.position.set(0, 0.5, 1); rightWing.rotation.x = Math.PI/2;
+            salmonInner.add(leftWing); salmonInner.add(rightWing);
+
+            // Expand size
+            salmonGroup.scale.set(1.5, 1.5, 1.5);
+            
+            // Fly to sky
+            targetPos.set(0, salmonGroup.position.y + 100, salmonGroup.position.z + 100);
+            startPos.copy(salmonGroup.position);
+            jumpProgress = 0;
+            jumpDuration = 5.0; // Long flight up
+
+            setTimeout(() => {
+                returnToMenu(); // Uses the new helper to stop music and show main menu
+            }, 6000);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(e) {
+            mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function onKeyDown(e) {
+            if (state.status === 'playing' && !isJumping) {
+                if (e.key.length !== 1 || !/[a-zA-Z]/.test(e.key)) return;
+                const typedChar = e.key.toUpperCase();
+                const expectedChar = state.targetSequence[state.typedSequence.length];
+
+                if (typedChar === expectedChar) {
+                    state.typedSequence += typedChar;
+                    playSfx('ok');
+                    updateSequenceUI();
+                    if (state.typedSequence === state.targetSequence) triggerTypingJump();
+                } else {
+                    playSfx('error');
+                    const container = document.getElementById('sequenceDisplay');
+                    container.classList.remove('error-shake');
+                    void container.offsetWidth; 
+                    container.classList.add('error-shake');
+                }
+            } 
+            else if (state.status === 'minigame') {
+                if (e.code === 'ArrowLeft' || e.key === 'a' || e.key === 'A') mgKeys.left = true;
+                if (e.code === 'ArrowRight' || e.key === 'd' || e.key === 'D') mgKeys.right = true;
+                if (e.code === 'Space') {
+                    if (mgState.isGrinding) {
+                        mgState.isGrinding = false; isMgJumping = true; mgJumpProgress = 0; mgState.jumpHeight = 6.0;
+                        mgState.jumpStartOffset = 1.5; state.currentTrick = 15; // Trigger 4x 360 spin!
+                        playSfx('jump'); createSplash(salmonGroup.position);
+                    } else if (!isMgJumping) {
+                        isMgJumping = true; mgJumpProgress = 0; mgState.jumpHeight = 4.0;
+                        mgState.jumpStartOffset = 0.0; state.currentTrick = Math.floor(Math.random() * 15);
+                        playSfx('jump'); createSplash(salmonGroup.position);
+                    }
+                }
+            }
+        }
+
+        function onKeyUp(e) {
+            if (state.status === 'minigame') {
+                if (e.code === 'ArrowLeft' || e.key === 'a' || e.key === 'A') mgKeys.left = false;
+                if (e.code === 'ArrowRight' || e.key === 'd' || e.key === 'D') mgKeys.right = false;
+            }
+        }
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+            const dt = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent lag spikes breaking physics
+
+            // --- ASCENSION PHASE ---
+            if (state.status === 'ascension') {
+                jumpProgress += dt / jumpDuration;
+                if(jumpProgress <= 1.0) {
+                    salmonGroup.position.lerpVectors(startPos, targetPos, jumpProgress);
+                    salmonGroup.lookAt(targetPos);
+                    salmonInner.rotation.x += 10 * dt; // Spin dynamically
+                }
+                camera.position.lerp(new THREE.Vector3(targetPos.x, targetPos.y - 20, targetPos.z), 2*dt);
+                camera.lookAt(salmonGroup.position);
+            }
+            // --- TYPING PHASE LOGIC ---
+            else if (state.status === 'playing') {
+                if (isJumping) {
+                    jumpProgress += dt / jumpDuration;
+                    if (jumpProgress >= 1.0) {
+                        jumpProgress = 1.0; isJumping = false;
+                        salmonGroup.position.copy(targetPos);
+                        salmonInner.rotation.set(0, -Math.PI / 2, 0); 
+                        playSfx('splash'); createSplash(targetPos);
+                        
+                        if (state.currentJumpIndex >= state.jumpsNeeded) levelComplete();
+                        else generateSequence();
+                    } else {
+                        salmonGroup.position.lerpVectors(startPos, targetPos, jumpProgress);
+                        const arcHeight = 3.0;
+                        salmonGroup.position.z += Math.sin(jumpProgress * Math.PI) * arcHeight;
+                        applyTrickRotation(jumpProgress, state.currentTrick);
+
+                        const lookAhead = new THREE.Vector3().lerpVectors(startPos, targetPos, jumpProgress + 0.1);
+                        lookAhead.z += Math.sin((jumpProgress + 0.1) * Math.PI) * arcHeight;
+                        salmonGroup.lookAt(lookAhead);
+                    }
+                } else {
+                    salmonInner.rotation.set(Math.sin(Date.now() * 0.005) * 0.1, -Math.PI / 2, 0);
+                    const lookTarget = new THREE.Vector3(salmonGroup.position.x, salmonGroup.position.y + 10, salmonGroup.position.z + (10 * Math.tan(waterfallSlant)));
+                    salmonGroup.lookAt(lookTarget);
+                }
+            } 
+            // --- MINIGAME PHASE LOGIC ---
+            else if (state.status === 'minigame') {
+                mgState.timeLeft -= dt;
+                document.getElementById('mgTimerText').innerText = Math.max(0, mgState.timeLeft).toFixed(1) + 's';
+
+                // Rainbow Check
+                if (mgState.rainbowTime > 0) {
+                    mgState.rainbowTime -= dt;
+                    const hue = (Date.now() * 0.002) % 1;
+                    salmonInner.children.forEach(c => {
+                        if (c.material && c.material.color && c.material.color.getHex() !== 0x000000) c.material.color.setHSL(hue, 1, 0.6);
+                    });
+                    if (mgState.rainbowTime <= 0) {
+                        document.getElementById('rainbowText').style.opacity = 0;
+                        salmonInner.children.forEach(c => {
+                            if (c === tailMesh) c.material.color.setHex(0xf0544f);
+                            else if (c.material && c.material.color && c.material.color.getHex() !== 0x000000) c.material.color.setHex(0xff7e67);
+                        });
+                    }
+                }
+
+                if (!mgState.isGrinding) {
+                    const moveSpeed = 18 * dt;
+                    if (mgKeys.left) salmonGroup.position.x -= moveSpeed;
+                    if (mgKeys.right) salmonGroup.position.x += moveSpeed;
+                    salmonGroup.position.x = Math.max(-12, Math.min(12, salmonGroup.position.x)); 
+                }
+
+                let baseZ = (salmonGroup.position.y * Math.tan(waterfallSlant));
+
+                if (mgState.isGrinding) {
+                    let target = mgState.grindTarget;
+                    salmonGroup.position.x += (target.position.x - salmonGroup.position.x) * 10 * dt; 
+                    salmonGroup.position.z = target.position.z + 1.5; 
+                    playSfx('grind'); createSparks(salmonGroup.position);
+                    salmonInner.rotation.set(0, -Math.PI / 2, 0); 
+                    
+                    if (target.position.y + (target.userData.length/2) < salmonGroup.position.y) {
+                        mgState.isGrinding = false; isMgJumping = true; mgJumpProgress = 0; mgState.jumpHeight = 5.0;
+                        mgState.jumpStartOffset = 1.5; state.currentTrick = 15; // Auto Trigger 4x 360 Spin!
+                    }
+                } else if (isMgJumping) {
+                    mgJumpProgress += dt / mgJumpDuration;
+                    if (mgJumpProgress >= 1.0) {
+                        isMgJumping = false; salmonGroup.position.z = baseZ; salmonInner.rotation.set(0, -Math.PI / 2, 0); 
+                        playSfx('splash'); createSplash(salmonGroup.position);
+                        mgState.combo = 0; updateComboUI(); 
+                    } else {
+                        let currentOffset = THREE.MathUtils.lerp(mgState.jumpStartOffset, 0, mgJumpProgress);
+                        salmonGroup.position.z = baseZ + currentOffset + (Math.sin(mgJumpProgress * Math.PI) * mgState.jumpHeight);
+                        applyTrickRotation(mgJumpProgress, state.currentTrick);
+                    }
+                } else {
+                    salmonGroup.position.z = baseZ;
+                    salmonInner.rotation.set(Math.sin(Date.now() * 0.01) * 0.1, -Math.PI / 2, 0);
+                }
+
+                salmonGroup.lookAt(new THREE.Vector3(salmonGroup.position.x, salmonGroup.position.y + 10, salmonGroup.position.z + (10 * Math.tan(waterfallSlant))));
+
+                mgState.nextSpawn -= dt;
+                if (mgState.nextSpawn <= 0) {
+                    spawnObstacle();
+                    let spawnRate = state.difficulty === 'easy' ? 1.5 : state.difficulty === 'hard' ? 0.8 : 1.2;
+                    mgState.nextSpawn = Math.max(0.2, (spawnRate - (state.currentLevel * 0.1)) / mgState.rushMultiplier); 
+                }
+
+                for(let i = activeObstacles.length - 1; i >= 0; i--) {
+                    let obs = activeObstacles[i];
+                    obs.position.y -= obs.userData.speed * dt;
+                    
+                    if (obs.userData.type === 'wasabi') {
+                        obs.rotation.y += 5 * dt;
+                        obs.rotation.z += 2 * dt;
+                    }
+
+                    if (obs.userData.type === 'bear') {
+                        obs.position.z -= obs.userData.smashZSpeed * dt;
+                        const waterZ = obs.position.y * Math.tan(waterfallSlant);
+                        if (obs.position.z < waterZ) { obs.position.z = waterZ; playSfx('splash'); createSplash(obs.position); obs.userData.smashZSpeed = 0;}
+                    } else if (obs.userData.type !== 'wasabi') {
+                        obs.position.z = (obs.position.y * Math.tan(waterfallSlant));
+                    }
+                    
+                    let dx = Math.abs(salmonGroup.position.x - obs.position.x);
+                    let dyHit = obs.userData.type === 'grind_log' ? (obs.userData.length / 2) : obs.userData.radius;
+                    let dy = Math.abs(salmonGroup.position.y - obs.position.y);
+                    let dz = salmonGroup.position.z - obs.position.z;
+                    let hitRadius = obs.userData.radius;
+
+                    if (mgState.isGrinding && obs === mgState.grindTarget) continue; 
+
+                    if (dx < hitRadius && dy < dyHit + 1.0) {
+                        if (obs.userData.type === 'wasabi') {
+                            mgState.rainbowTime = 5.0; document.getElementById('rainbowText').style.opacity = 1;
+                            playSfx('levelup'); scene.remove(obs); activeObstacles.splice(i, 1); continue;
+                        }
+
+                        if (dz > hitRadius * 0.5) {
+                            if (isMgJumping && mgJumpProgress > 0.4 && obs.userData.type !== 'bear') {
+                                if (obs.userData.type === 'grind_log') {
+                                    mgState.isGrinding = true; mgState.grindTarget = obs; isMgJumping = false; mgState.dodgedCount += 2; 
+                                    mgState.combo++; updateComboUI();
+                                } else {
+                                    playSfx('jump'); isMgJumping = true; mgJumpProgress = 0; mgState.jumpHeight = 8.0; 
+                                    mgState.jumpStartOffset = hitRadius; state.currentTrick = Math.floor(Math.random() * 15);
+                                    createSplash(salmonGroup.position); mgState.dodgedCount += 2; mgState.combo++; updateComboUI();
+                                }
+                                mgState.rushMultiplier = Math.min(3.5, 1.0 + (mgState.dodgedCount * 0.03));
+                                obs.userData.cleared = true; 
+                            }
+                        } else if (dz > -hitRadius && !mgState.isGrinding) {
+                            if (mgState.rainbowTime > 0) {
+                                createSparks(obs.position);
+                                playSfx('crash');
+                                scene.remove(obs); activeObstacles.splice(i, 1);
+                                mgState.dodgedCount++;
+                            } else {
+                                endMinigame(false); break;
+                            }
+                        }
+                    }
+
+                    if (!obs.userData.cleared && obs.position.y < salmonGroup.position.y - dyHit) {
+                        obs.userData.cleared = true;
+                        mgState.dodgedCount++;
+                        let inc = state.difficulty === 'easy' ? 0.015 : state.difficulty === 'hard' ? 0.05 : 0.03;
+                        mgState.rushMultiplier = Math.min(3.5, 1.0 + (mgState.dodgedCount * inc));
+                    }
+                } // End of activeObstacles loop
+
+                // Check for minigame completion
+                if (mgState.timeLeft <= 0) {
+                    endMinigame(true);
+                }
+
+            } // End of minigame logic phase
+
+            // --- UNIVERSAL VISUALS ---
+            // Process Rainbow Power-up Color Shifts
+            if (state.status === 'minigame' && mgState.rainbowTime > 0) {
+                mgState.rainbowTime -= dt;
+                const hue = (Date.now() * 0.002) % 1;
+                
+                salmonInner.traverse(c => {
+                    if (c.isMesh && c.material && c.material.color && c.material.color.getHex() !== 0xffffff && c.material.color.getHex() !== 0x000000) {
+                        if (c.material.userData.origColor === undefined) c.material.userData.origColor = c.material.color.getHex();
+                        c.material.color.setHSL(hue, 1, 0.6);
+                    }
+                });
+
+                if (mgState.rainbowTime <= 0) {
+                    document.getElementById('rainbowText').style.opacity = 0;
+                    salmonInner.traverse(c => {
+                        if (c.isMesh && c.material && c.material.userData.origColor !== undefined) {
+                            c.material.color.setHex(c.material.userData.origColor);
+                        }
+                    });
+                }
+            }
+
+            let targetUpX = 0;
+                if (state.status === 'minigame') {
+                    camera.fov = THREE.MathUtils.lerp(camera.fov, 60 + (mgState.rushMultiplier - 1.0) * 15, 2 * dt);
+                    targetUpX = -(salmonGroup.position.x / 12) * 0.25; 
+                } else {
+                    camera.fov = THREE.MathUtils.lerp(camera.fov, 60, 5 * dt);
+                    targetUpX = -(mouseX) * 0.1; 
+                }
+                camera.updateProjectionMatrix();
+
+                camera.up.x += (targetUpX - camera.up.x) * 5 * dt;
+            camera.up.normalize();
+
+            if (swimmerParts.length > 0 && state.status !== 'ascension') {
+                let flapSpeed = (isJumping || isMgJumping) ? 0.03 : 0.015;
+                if (state.status === 'minigame') flapSpeed = 0.04 * mgState.rushMultiplier; 
+                
+                let flap = Math.sin(Date.now() * flapSpeed);
+                swimmerParts.forEach(part => {
+                    if (part.type === 'tail') part.mesh.rotation.y = flap * 0.5;
+                    else if (part.type === 'beaverTail') part.mesh.rotation.z = flap * 0.4;
+                    else if (part.type === 'flipper') part.mesh.rotation.z = flap * 0.3 * part.sign;
+                    else if (part.type === 'leg') part.mesh.rotation.x = (Math.PI/4 * part.sign) + (flap * 0.2);
+                });
+            }
+
+            const localRefY = (salmonGroup ? salmonGroup.position.y : 0) / Math.cos(waterfallSlant);
+                foamLines.forEach(foam => {
+                    let currentSpeed = foam.userData.speed;
+                    if (state.status === 'minigame') currentSpeed *= (1.5 * mgState.rushMultiplier); 
+                    foam.position.y -= currentSpeed * dt;
+                    if(foam.position.y < localRefY - 40) {
+                        foam.position.y = localRefY + 120;
+                        foam.position.x = (Math.random() - 0.5) * 80;
+                    }
+                });
+
+                if (salmonGroup) {
+                    let targetCameraX, targetCameraY, targetCameraZ;
+                    if (state.status === 'minigame') {
+                        targetCameraX = salmonGroup.position.x * 0.3; 
+                        targetCameraY = salmonGroup.position.y - 12;
+                        targetCameraZ = salmonGroup.position.z + 10;
+                    } else {
+                        targetCameraX = salmonGroup.position.x + (mouseX * 4);
+                        targetCameraY = salmonGroup.position.y - 6 + (mouseY * 2);
+                        targetCameraZ = salmonGroup.position.z + 8;
+                    }
+
+                    camera.position.x += (targetCameraX - camera.position.x) * 5 * dt;
+                    camera.position.y += (targetCameraY - camera.position.y) * 5 * dt;
+                    camera.position.z += (targetCameraZ - camera.position.z) * 5 * dt;
+
+                    const lookTarget = new THREE.Vector3(salmonGroup.position.x * 0.5, salmonGroup.position.y + 10, salmonGroup.position.z + (10 * Math.tan(waterfallSlant)));
+                    camera.lookAt(lookTarget);
+                }
+
+            // Splash Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.userData.vy -= 30 * dt; 
+                p.position.x += p.userData.vx * dt; p.position.y += p.userData.vy * dt; p.position.z += p.userData.vz * dt;
+                p.userData.life -= dt * 2;
+                p.scale.setScalar(Math.max(0, p.userData.life));
+                if (p.userData.life <= 0) { scene.remove(p); particles.splice(i, 1); }
+            }
+
+            if (state.status === 'playing' && rockMeshes[state.currentJumpIndex + 1]) {
+                rockMeshes.forEach(r => r.material.emissive.setHex(0x000000));
+                rockMeshes[state.currentJumpIndex + 1].material.emissive.setHex(0x114411);
+            }
+
+            if (renderer && scene && camera) renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

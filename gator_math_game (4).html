@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gator Math</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Fredoka One', cursive;
+            background-color: #87CEEB; /* Sky blue fallback */
+            touch-action: none; /* Prevent scroll on mobile */
+            user-select: none;
+        }
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass to 3D canvas */
+        }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Text stroking for comic effect */
+        .text-outline {
+            -webkit-text-stroke: 2px black;
+        }
+        .text-outline-thin {
+            -webkit-text-stroke: 1px black;
+        }
+
+        .pixelated-canvas {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: pixelated;
+            width: 100vw !important;
+            height: 100vh !important;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        
+        <!-- HUD (Heads Up Display) -->
+        <div id="hud" class="hidden absolute top-4 left-4 right-4 flex justify-between items-start">
+            <div id="score-display" class="text-2xl md:text-4xl text-white drop-shadow-md border-4 border-white bg-blue-500 rounded-2xl px-4 py-2 text-outline-thin shadow-lg">
+                Score: 0
+            </div>
+            
+            <div class="flex flex-col items-center mt-2">
+                <div id="equation-display" class="text-5xl md:text-7xl text-yellow-300 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] text-outline font-black mb-2 tracking-wider">
+                    15 - 3 = ?
+                </div>
+                <div class="text-sm md:text-xl text-white bg-black/50 px-4 py-1 rounded-full mb-1">
+                    Select the correct box!
+                </div>
+            </div>
+            
+            <div class="w-32 md:w-64">
+                <div class="text-right text-white text-lg md:text-xl mb-1 drop-shadow-md font-bold">Time Left</div>
+                <div class="h-6 md:h-8 w-full bg-red-900 rounded-full overflow-hidden border-2 md:border-4 border-white shadow-lg">
+                    <div id="timer-bar" class="h-full bg-red-500 w-full"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flash Overlays -->
+        <div id="flash-overlay" class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-200 z-20"></div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
+            <div class="bg-blue-500 border-8 border-white p-8 md:p-12 rounded-3xl text-center max-w-xl flex flex-col items-center shadow-2xl mx-4">
+                <h1 class="text-5xl md:text-7xl text-green-400 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] text-outline mb-4">Gator Math!</h1>
+                <p class="text-xl md:text-2xl text-white mb-4 drop-shadow-sm">Solve the subtractions before the gator catches you!</p>
+                <div class="bg-black/30 p-4 rounded-xl mb-8 border-2 border-dashed border-white/50">
+                    <p class="text-lg md:text-xl text-yellow-300 font-bold mb-1">Rule 1: Always subtract by 3.</p>
+                    <p class="text-lg md:text-xl text-pink-300 font-bold">Rule 2: Watch out for 3-number combos!</p>
+                </div>
+
+                <div class="mb-6 flex flex-col items-center">
+                    <label for="audio-upload" class="cursor-pointer bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-6 rounded-lg border-2 border-white shadow-[0_4px_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-[4px] transition transform">
+                        🎵 Upload Custom Song
+                    </label>
+                    <input type="file" id="audio-upload" accept="audio/*" class="hidden" onchange="handleAudioUpload(event)">
+                    <p id="audio-status" class="hidden mt-2 text-sm text-green-300 font-bold bg-black/50 px-3 py-1 rounded"></p>
+                </div>
+
+                <button onclick="startGame()" class="bg-yellow-400 hover:bg-yellow-300 text-black text-2xl md:text-4xl py-4 px-12 rounded-full border-4 border-black transition transform hover:scale-105 shadow-[0_6px_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-[6px]">
+                    PLAY NOW
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm pointer-events-auto">
+            <div class="bg-red-600 border-8 border-white p-8 md:p-12 rounded-3xl text-center max-w-xl flex flex-col items-center shadow-2xl mx-4">
+                <h1 class="text-5xl md:text-7xl text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] text-outline mb-4">CHOMPED!</h1>
+                <p class="text-xl md:text-3xl text-yellow-300 mb-6 drop-shadow-sm font-bold">The Gator got you.</p>
+                <p id="final-score" class="text-3xl md:text-4xl text-white mb-8 text-outline-thin">Final Score: 0</p>
+                <button onclick="restartGame()" class="bg-green-400 hover:bg-green-300 text-black text-2xl md:text-4xl py-4 px-12 rounded-full border-4 border-black transition transform hover:scale-105 shadow-[0_6px_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-[6px]">
+                    TRY AGAIN
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="game-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, raycaster, mouse;
+        let alligator, upperJawPivot, lowerJawPivot, bodyMesh, legs = [];
+        let runnersGroup, runners = [];
+        let trees = [];
+        let groundMat;
+        
+        let gameState = 'START'; // START, PLAYING, GAMEOVER, ENDED
+        let score = 0;
+        let maxTime = 8000; // ms
+        let timeRemaining = 8000;
+        let lastFrameTime = performance.now();
+        let currentAnswer = 0;
+        let groundSpeed = 1.0;
+        let gameOverStartTime = 0;
+
+        let bgMusic = new Audio();
+        bgMusic.loop = true;
+        bgMusic.volume = 0.5;
+
+        window.handleAudioUpload = function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                bgMusic.src = url;
+                document.getElementById('audio-status').innerText = `Loaded: ${file.name}`;
+                document.getElementById('audio-status').classList.remove('hidden');
+            }
+        }
+
+        function setPS1Size() {
+            const factor = 4; // Downscale by 4 for extreme PS1 pixelation
+            renderer.setSize(window.innerWidth / factor, window.innerHeight / factor, false);
+            renderer.domElement.classList.add('pixelated-canvas');
+        }
+
+        function initThreeJS() {
+            const container = document.getElementById('game-container');
+            
+            // Scene & Camera
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            // Closer fog for PS1 draw distance feel
+            scene.fog = new THREE.Fog(0x87CEEB, 5, 30);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 5, 12);
+            camera.lookAt(0, 2, 0);
+
+            // Renderer - disable antialias for raw PS1 look
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            setPS1Size();
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.BasicShadowMap; // Hard shadows
+            container.appendChild(renderer.domElement);
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0xffffff, 0.8); // Brighter ambient to match lambert
+            scene.add(ambient);
+
+            const dirLight = new THREE.DirectionalLight(0xfffaed, 0.9);
+            dirLight.position.set(20, 30, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 100;
+            dirLight.shadow.camera.left = -30;
+            dirLight.shadow.camera.right = 30;
+            dirLight.shadow.camera.top = 30;
+            dirLight.shadow.camera.bottom = -30;
+            scene.add(dirLight);
+
+            // Interactions
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('touchstart', onTouchDown, { passive: false });
+
+            createEnvironment();
+            createAlligator();
+            createRunners();
+            
+            // Start Loop
+            requestAnimationFrame(animate);
+        }
+
+        function createGroundTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64; // Low res texture
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#4ade80'; // Base Grass
+            ctx.fillRect(0, 0, 64, 64);
+            
+            ctx.fillStyle = '#22c55e'; // Grass Stripes for speed
+            for(let i=0; i<64; i+=16) {
+                ctx.fillRect(0, i, 64, 8);
+            }
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(20, 100);
+            
+            // Nearest Neighbor filtering for blocky pixels
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        function createTextTexture(text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128; 
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#facc15'; 
+            ctx.fillRect(0, 0, 128, 128);
+            
+            ctx.strokeStyle = '#ca8a04'; 
+            ctx.lineWidth = 8;
+            ctx.strokeRect(4, 4, 120, 120);
+
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 50px "Fredoka One", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 64, 68); 
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            
+            // Nearest Neighbor filtering
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        function createEnvironment() {
+            // Endless scrolling ground
+            const groundGeo = new THREE.PlaneGeometry(200, 200);
+            groundMat = new THREE.MeshLambertMaterial({ map: createGroundTexture() });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Trees whizzing by
+            // PS1 Low Poly: 3 radial segments (triangular cones)
+            const treeGeo = new THREE.ConeGeometry(1.5, 5, 3);
+            const treeMat = new THREE.MeshLambertMaterial({color: 0x14532d, flatShading: true});
+            // Low poly trunk: 3 segments
+            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 1.5, 3);
+            const trunkMat = new THREE.MeshLambertMaterial({color: 0x78350f, flatShading: true});
+
+            for(let i=0; i<24; i++) {
+                const tree = new THREE.Group();
+                
+                const foliage = new THREE.Mesh(treeGeo, treeMat);
+                foliage.position.y = 3;
+                foliage.castShadow = true;
+                tree.add(foliage);
+                
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 0.75;
+                trunk.castShadow = true;
+                tree.add(trunk);
+                
+                // Scatter deeply along Z, outside the central path
+                tree.position.z = Math.random() * -80 + 10;
+                tree.position.x = (Math.random() > 0.5 ? 1 : -1) * (7 + Math.random() * 12);
+                
+                scene.add(tree);
+                trees.push(tree);
+            }
+        }
+
+        function createAlligator() {
+            alligator = new THREE.Group();
+            alligator.position.set(0, 0, -15);
+            scene.add(alligator);
+
+            const alligatorMat = new THREE.MeshLambertMaterial({color: 0x15803d, flatShading: true});
+            const toothMat = new THREE.MeshLambertMaterial({color: 0xffffff, flatShading: true});
+
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(3, 1.2, 5);
+            bodyMesh = new THREE.Mesh(bodyGeo, alligatorMat);
+            bodyMesh.position.y = 1.2;
+            bodyMesh.castShadow = true;
+            alligator.add(bodyMesh);
+
+            // Tail - lower poly (3 segments)
+            const tailGeo = new THREE.ConeGeometry(1.2, 5, 3);
+            const tail = new THREE.Mesh(tailGeo, alligatorMat);
+            tail.position.set(0, 1.2, -4.5);
+            tail.rotation.x = -Math.PI / 2;
+            tail.castShadow = true;
+            alligator.add(tail);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.8, 1.2, 1);
+            const legPositions = [
+                {x: 1.7, z: 1.5}, {x: -1.7, z: 1.5},
+                {x: 1.7, z: -1.5}, {x: -1.7, z: -1.5}
+            ];
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, alligatorMat);
+                leg.position.set(pos.x, 0.6, pos.z);
+                leg.castShadow = true;
+                alligator.add(leg);
+                legs.push(leg);
+            });
+
+            // Head and Jaws (Pivots at the back of the mouth)
+            upperJawPivot = new THREE.Group();
+            upperJawPivot.position.set(0, 1.5, 2.5); // relative to alligator origin
+            
+            const ujGeo = new THREE.BoxGeometry(2.4, 0.8, 3.5);
+            const uj = new THREE.Mesh(ujGeo, alligatorMat);
+            uj.position.set(0, 0.4, 1.75); // shift forward from pivot
+            uj.castShadow = true;
+            upperJawPivot.add(uj);
+            
+            // Eyes - PS1 style blocky eyes instead of spheres
+            const eyeGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const eyeMat = new THREE.MeshLambertMaterial({color: 0xffffff, flatShading: true});
+            const pupilGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const pupilMat = new THREE.MeshLambertMaterial({color: 0x000000, flatShading: true});
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.8, 0.9, 1.0);
+            const rPupil = new THREE.Mesh(pupilGeo, pupilMat);
+            rPupil.position.set(0.1, 0.2, 0.3);
+            rightEye.add(rPupil);
+            upperJawPivot.add(rightEye);
+
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.8, 0.9, 1.0);
+            const lPupil = new THREE.Mesh(pupilGeo, pupilMat);
+            lPupil.position.set(-0.1, 0.2, 0.3);
+            leftEye.add(lPupil);
+            upperJawPivot.add(leftEye);
+
+            alligator.add(upperJawPivot);
+
+            // Lower Jaw
+            lowerJawPivot = new THREE.Group();
+            lowerJawPivot.position.set(0, 0.8, 2.5);
+            
+            const ljGeo = new THREE.BoxGeometry(2.2, 0.5, 3.3);
+            const lj = new THREE.Mesh(ljGeo, alligatorMat);
+            lj.position.set(0, -0.25, 1.65);
+            lj.castShadow = true;
+            lowerJawPivot.add(lj);
+            
+            alligator.add(lowerJawPivot);
+
+            // Teeth - Low poly (3 segments)
+            const toothGeo = new THREE.ConeGeometry(0.15, 0.4, 3);
+            for(let i=0; i<4; i++) {
+                let zOffset = 0.5 + i * 0.8; 
+                // Upper teeth (point down)
+                let t1 = new THREE.Mesh(toothGeo, toothMat);
+                t1.position.set(1.0, 0, zOffset);
+                t1.rotation.x = Math.PI;
+                upperJawPivot.add(t1);
+                let t2 = new THREE.Mesh(toothGeo, toothMat);
+                t2.position.set(-1.0, 0, zOffset);
+                t2.rotation.x = Math.PI;
+                upperJawPivot.add(t2);
+                
+                // Lower teeth (point up)
+                let t3 = new THREE.Mesh(toothGeo, toothMat);
+                t3.position.set(0.9, 0, zOffset);
+                lowerJawPivot.add(t3);
+                let t4 = new THREE.Mesh(toothGeo, toothMat);
+                t4.position.set(-0.9, 0, zOffset);
+                lowerJawPivot.add(t4);
+            }
+        }
+
+        function createRunners() {
+            runnersGroup = new THREE.Group();
+            runnersGroup.position.set(0, 0, 5); // Z=5 is in front of camera
+            scene.add(runnersGroup);
+
+            const spacing = 3.5;
+            for (let i = 0; i < 3; i++) {
+                const geo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
+                const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.x = (i - 1) * spacing;
+                mesh.position.y = 1.0;
+                mesh.castShadow = true;
+                runnersGroup.add(mesh);
+                runners.push(mesh);
+            }
+        }
+
+        function generateLevel() {
+            // "Sometimes include 3 values", "subtractions by 3"
+            const useThreeValues = Math.random() < 0.4;
+            let eqString = "";
+            let ans = 0;
+            
+            if (useThreeValues) {
+                const a = Math.floor(Math.random() * 20) + 12; // 12 to 31
+                const b = Math.floor(Math.random() * 8) + 1;   // 1 to 8
+                
+                // Randomly place the '3'
+                if (Math.random() < 0.5) {
+                    eqString = `${a} - 3 - ${b}`;
+                } else {
+                    eqString = `${a} - ${b} - 3`;
+                }
+                ans = a - 3 - b;
+            } else {
+                const a = Math.floor(Math.random() * 20) + 4; // 4 to 23
+                eqString = `${a} - 3`;
+                ans = a - 3;
+            }
+            
+            let options = [ans];
+            while (options.length < 3) {
+                let variance = Math.floor(Math.random() * 7) - 3; // -3 to +3
+                if (variance === 0) variance = 4;
+                let wrongAns = ans + variance;
+                if (wrongAns >= 0 && !options.includes(wrongAns)) {
+                    options.push(wrongAns);
+                }
+            }
+            
+            // Shuffle answers
+            options.sort(() => Math.random() - 0.5);
+            return { equation: eqString, answer: ans, options: options };
+        }
+
+        function loadNewLevel() {
+            const levelData = generateLevel();
+            currentAnswer = levelData.answer;
+            document.getElementById('equation-display').innerText = `${levelData.equation} = ?`;
+            
+            for (let i = 0; i < 3; i++) {
+                let val = levelData.options[i];
+                runners[i].userData.value = val;
+                
+                if (runners[i].material.map) runners[i].material.map.dispose();
+                runners[i].material.map = createTextTexture(val);
+                runners[i].material.needsUpdate = true;
+                runners[i].visible = true;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            setPS1Size();
+        }
+
+        function onPointerDown(event) {
+            handleInteraction(event.clientX, event.clientY);
+        }
+
+        function onTouchDown(event) {
+            if (gameState !== 'PLAYING') return;
+            if (event.touches.length > 0 && event.target.tagName === 'CANVAS') {
+                event.preventDefault(); // prevent scroll/zoom only on game board
+                handleInteraction(event.touches[0].clientX, event.touches[0].clientY);
+            }
+        }
+
+        function handleInteraction(clientX, clientY) {
+            if (gameState !== 'PLAYING') return;
+
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(runnersGroup.children);
+
+            if (intersects.length > 0 && intersects[0].object.visible) {
+                const clickedVal = intersects[0].object.userData.value;
+                if (clickedVal === currentAnswer) {
+                    onCorrectAnswer();
+                } else {
+                    triggerGameOver();
+                }
+            }
+        }
+
+        window.startGame = function() {
+            document.getElementById('start-screen').style.display = 'none';
+            restartGame();
+        };
+
+        window.restartGame = function() {
+            score = 0;
+            maxTime = 8000;
+            groundSpeed = 1.0;
+            document.getElementById('score-display').innerText = `Score: ${score}`;
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.getElementById('hud').style.display = 'flex';
+            
+            alligator.position.set(0, 0, -15);
+            upperJawPivot.rotation.x = 0;
+            lowerJawPivot.rotation.x = 0;
+            
+            runnersGroup.visible = true;
+            runners.forEach(r => r.visible = true);
+            
+            loadNewLevel();
+            
+            gameState = 'PLAYING';
+            timeRemaining = maxTime;
+            lastFrameTime = performance.now();
+
+            if (bgMusic.src) {
+                bgMusic.play().catch(e => console.log("Audio play blocked", e));
+            }
+        };
+
+        function onCorrectAnswer() {
+            score += 10;
+            document.getElementById('score-display').innerText = `Score: ${score}`;
+            
+            // Speed up / make harder
+            maxTime = Math.max(3000, 8000 - (score * 40)); 
+            timeRemaining = maxTime;
+            groundSpeed = 1.0 + (score * 0.05);
+
+            // Screen flash green
+            const flash = document.getElementById('flash-overlay');
+            flash.style.background = 'rgba(74, 222, 128, 0.4)';
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 200);
+            
+            loadNewLevel();
+        }
+
+        function triggerGameOver() {
+            if(gameState === 'GAMEOVER' || gameState === 'ENDED') return;
+            gameState = 'GAMEOVER';
+            gameOverStartTime = performance.now();
+            document.getElementById('hud').style.display = 'none';
+            
+            // Screen flash red
+            const flash = document.getElementById('flash-overlay');
+            flash.style.background = 'rgba(239, 68, 68, 0.5)';
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 300);
+
+            if (bgMusic.src) {
+                bgMusic.pause();
+                bgMusic.currentTime = 0;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let now = performance.now();
+            let delta = now - lastFrameTime;
+            if (delta > 100) delta = 16; // Safeguard if tab was inactive
+            lastFrameTime = now;
+            let timeSec = now * 0.001;
+
+            if (gameState === 'PLAYING') {
+                // Update Timer
+                timeRemaining -= delta;
+                if (timeRemaining <= 0) {
+                    timeRemaining = 0;
+                    triggerGameOver();
+                }
+                const progress = Math.max(0, (timeRemaining / maxTime) * 100);
+                document.getElementById('timer-bar').style.width = `${progress}%`;
+
+                // Alligator creeping logic
+                let timeRatio = timeRemaining / maxTime; 
+                let targetZ = -14 + (1 - timeRatio) * 12; // Moves from -14 to -2 as time runs out
+                alligator.position.z += (targetZ - alligator.position.z) * 0.05;
+
+                // Alligator Wobble / Walking
+                let walkSpeed = timeSec * 15;
+                bodyMesh.rotation.z = Math.sin(walkSpeed) * 0.05;
+                bodyMesh.position.y = 1.2 + Math.abs(Math.sin(walkSpeed)) * 0.2;
+                
+                legs[0].position.y = 0.6 + Math.abs(Math.sin(walkSpeed)) * 0.4; // Front Right
+                legs[1].position.y = 0.6 + Math.abs(Math.sin(walkSpeed + Math.PI)) * 0.4; // Front Left
+                legs[2].position.y = 0.6 + Math.abs(Math.sin(walkSpeed + Math.PI)) * 0.4; // Back Right
+                legs[3].position.y = 0.6 + Math.abs(Math.sin(walkSpeed)) * 0.4; // Back Left
+
+                // Idle Snapping
+                upperJawPivot.rotation.x = -0.1 + Math.sin(timeSec * 5) * 0.1;
+                lowerJawPivot.rotation.x = 0.1 - Math.sin(timeSec * 5) * 0.1;
+
+                // Runners jumping
+                runners.forEach((r, idx) => {
+                    r.position.y = 0.8 + Math.abs(Math.sin(timeSec * 12 + idx)) * 1.2;
+                    r.rotation.y = Math.sin(timeSec * 5 + idx) * 0.1;
+                    r.rotation.x = Math.sin(timeSec * 7 + idx) * 0.1;
+                });
+            }
+
+            if (gameState === 'GAMEOVER') {
+                let t = now - gameOverStartTime;
+                
+                // Alligator lunge
+                alligator.position.z += 0.8 * (delta / 16); 
+                
+                if (t < 400) {
+                    // Open wide
+                    upperJawPivot.rotation.x = Math.max(-Math.PI/3, upperJawPivot.rotation.x - 0.1);
+                    lowerJawPivot.rotation.x = Math.min(Math.PI/3, lowerJawPivot.rotation.x + 0.1);
+                } else {
+                    // Snap shut!
+                    upperJawPivot.rotation.x = Math.min(0, upperJawPivot.rotation.x + 0.3);
+                    lowerJawPivot.rotation.x = Math.max(0, lowerJawPivot.rotation.x - 0.3);
+                }
+                
+                // Eat runners
+                runners.forEach(r => {
+                    if (alligator.position.z + 1.5 > r.position.z + runnersGroup.position.z) {
+                        r.visible = false;
+                    }
+                });
+                
+                // End sequence
+                if (alligator.position.z > camera.position.z + 2) {
+                    document.getElementById('game-over-screen').style.display = 'flex';
+                    document.getElementById('final-score').innerText = `Final Score: ${score}`;
+                    gameState = 'ENDED';
+                }
+            }
+
+            // Scroll environment (Ground & Trees) continuously except when ENDED
+            if (gameState !== 'START' && gameState !== 'ENDED') {
+                groundMat.map.offset.y -= groundSpeed * delta * 0.002;
+
+                trees.forEach(t => {
+                    t.position.z += groundSpeed * delta * 0.03;
+                    if (t.position.z > 15) {
+                        t.position.z = -80 - Math.random() * 40;
+                        t.position.x = (Math.random() > 0.5 ? 1 : -1) * (7 + Math.random() * 12);
+                    }
+                });
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Initialize when page loads
+        window.onload = initThreeJS;
+
+    </script>
+</body>
+</html>

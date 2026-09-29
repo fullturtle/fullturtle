@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beaver Math: Silent Timber (Retro Edition)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .panel { background: rgba(10, 10, 15, 0.85); border: 2px solid #555; box-shadow: 0 0 15px rgba(0, 0, 0, 0.9); color: #ddd; padding: 20px; border-radius: 8px; text-align: center; pointer-events: auto; text-shadow: 1px 1px 2px #000; }
+        .hidden { display: none !important; }
+        #lives-display { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; color: #ff3333; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 5px; border: 1px solid #ff3333; }
+        #dam-display { position: absolute; top: 20px; left: 20px; font-size: 1.5rem; color: #33aaff; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 5px; border: 1px solid #33aaff; }
+        #qte-container { font-size: 2rem; letter-spacing: 10px; font-weight: bold; color: #fff; }
+        .qte-key { display: inline-block; padding: 10px 15px; background: #333; border: 2px solid #777; border-radius: 5px; margin: 0 5px; }
+        .qte-key.active { background: #aa8800; border-color: #ffcc00; color: #000;}
+        .qte-key.done { background: #006600; border-color: #00ff00; color: #fff;}
+        #math-container input { background: #222; color: #fff; border: 1px solid #555; padding: 10px; font-size: 1.5rem; width: 150px; text-align: center; margin-top: 10px; font-family: inherit; }
+        #math-container input:focus { outline: none; border-color: #888; }
+        #combo-msg { position: absolute; top: 20%; font-size: 3rem; color: #ffaa00; font-weight: bold; text-shadow: 0 0 10px #ff0000; opacity: 0; transition: opacity 0.5s; }
+        #message-box { position: absolute; bottom: 10%; font-size: 1.2rem; color: #fff; font-weight: bold; background: rgba(0,0,0,0.7); border: 1px solid #555; padding: 5px 15px; border-radius: 5px; }
+        #math-timer { font-size: 1.2rem; color: #ff5555; font-weight: bold; margin-top: 10px; }
+        #rhythm-track { width: 300px; height: 40px; background: #222; border: 3px solid #fff; border-radius: 20px; margin: 20px auto; position: relative; overflow: hidden; box-shadow: inset 0 0 10px #000; }
+        #rhythm-zone { position: absolute; height: 100%; background: rgba(0, 255, 0, 0.6); border-left: 2px solid #0f0; border-right: 2px solid #0f0; }
+        #rhythm-cursor { position: absolute; width: 6px; height: 100%; background: #ff0000; box-shadow: 0 0 10px #ff0000; left: 0; top: 0; }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        <div id="lives-display">Lives: 3</div>
+        <div id="dam-display">Dam: 0 / 20 Logs</div>
+
+        <div id="intro-panel" class="panel">
+            <h1 class="text-3xl font-bold mb-4 text-green-400 tracking-widest">TIMBER MATH</h1>
+            <p class="mb-2">A vibrant, Ghibli-inspired forest awaits.</p>
+            <p class="mb-2 text-left text-sm">
+                - <b>Arrow Keys</b>: Move & Steer<br>
+                - <b>Spacebar</b>: Bite tree / Jump over bears & NPCs<br>
+                - <b>Build the dam (20 logs)</b>, but watch out for the Wolf!<br>
+            </p>
+            <button id="start-btn" class="mt-4 px-6 py-2 bg-green-700 hover:bg-green-600 text-white font-bold border border-green-500 rounded cursor-pointer">ENTER THE WOODS</button>
+        </div>
+
+        <div id="qte-panel" class="panel hidden">
+            <h2 class="text-xl mb-4 text-red-500">BITE THE TREE!</h2>
+            <div id="qte-container"></div>
+        </div>
+
+        <div id="math-panel" class="panel hidden">
+            <h2 class="text-xl mb-2 text-blue-400">MATH CONVERSION</h2>
+            <p id="math-question" class="text-2xl mb-4">Convert 15 cm to mm:</p>
+            <input type="number" id="math-input" autocomplete="off" autofocus>
+            <div id="math-timer">Time: 30.0s</div>
+            <p id="math-feedback" class="mt-2 text-red-500 h-6"></p>
+        </div>
+
+        <div id="fight-panel" class="panel hidden">
+            <h2 id="fight-title" class="text-3xl mb-4 text-red-600 font-bold">ATTACK!</h2>
+            <h3 id="fight-subtitle" class="text-xl mb-2 text-yellow-400">Round 1/4</h3>
+            <p class="mb-2 text-md">HIT SPACE IN THE GREEN ZONE!</p>
+            <div id="rhythm-track">
+                <div id="rhythm-zone"></div>
+                <div id="rhythm-cursor"></div>
+            </div>
+        </div>
+
+        <div id="game-over-panel" class="panel hidden">
+            <h1 class="text-4xl text-red-600 font-bold mb-4" id="game-over-title">GAME OVER</h1>
+            <p class="mb-4" id="game-over-desc">The bear had a tasty beaver snack.</p>
+            <button id="restart-btn" class="mt-4 px-6 py-2 bg-red-700 hover:bg-red-600 text-white font-bold border border-red-500 rounded cursor-pointer">TRY AGAIN</button>
+        </div>
+
+        <div id="combo-msg">COMBO! x2</div>
+        <div id="message-box"></div>
+    </div>
+
+<script>
+const STATES = { INIT: 0, ROAM: 1, QTE: 2, FALLING: 3, MATH: 4, DANCING: 5, CAUGHT: 6, GAMEOVER: 7, FIGHT: 8, BIG_TREE_RHYTHM: 9, WOLF_DEFENSE: 10 };
+let currentState = STATES.INIT;
+
+let scene, camera, renderer, beaver, flashlight, targetTree = null;
+let bears = [], wolf, damMesh, tailMesh;
+let trees = [], npcs = [], clouds = [];
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, Space: false };
+
+const MOVE_SPEED = 0.35, ROTATE_SPEED = 0.08, INTERACT_DIST = 4.5, COMBO_DIST = 7.0;
+let qteSequence = [], qteCurrentIndex = 0, currentMathAnswer = 0, comboCount = 1, treesFalling = [];
+let explosionParticles = [];
+let danceTime = 0, lives = 3, cutsceneTimer = 0, damLogs = 0;
+let isJumping = false, yVelocity = 0;
+let rhythmProgress = 0, rhythmTargetStart = 50, rhythmTargetWidth = 20, rhythmSpeed = 1.5;
+let wolfRound = 1, wolfTimer = 0;
+let mathTimeLeft = 30.0, mathInterval = null, sounds = {}, bgm;
+let furBumpMap, treeMats = null;
+let animeGain, scaryGain; // Added volume controls for dynamic music
+
+// UI Refs
+const uiLives = document.getElementById('lives-display'), uiDam = document.getElementById('dam-display');
+const uiIntro = document.getElementById('intro-panel'), uiQTE = document.getElementById('qte-panel'), qteContainer = document.getElementById('qte-container');
+const uiMath = document.getElementById('math-panel'), mathQuestion = document.getElementById('math-question'), mathInput = document.getElementById('math-input');
+const mathFeedback = document.getElementById('math-feedback'), uiTimer = document.getElementById('math-timer'), uiGameOver = document.getElementById('game-over-panel');
+const uiFight = document.getElementById('fight-panel'), fightTitle = document.getElementById('fight-title'), fightSubtitle = document.getElementById('fight-subtitle');
+const msgBox = document.getElementById('message-box'), comboMsg = document.getElementById('combo-msg');
+
+window.onload = () => {
+    initScene();
+    document.getElementById('start-btn').addEventListener('click', async () => {
+        await Tone.start();
+        initAudio();
+        startGame();
+    });
+};
+
+function initAudio() {
+    animeGain = new Tone.Volume(-12).toDestination();
+    scaryGain = new Tone.Volume(-60).toDestination(); // Starts muted
+
+    // Wrap most instruments in PolySynth to prevent envelope overlap crashes
+    sounds = {
+        bite: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'square' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination(),
+        fall: new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.1, decay: 1.5, sustain: 0 } }).toDestination(),
+        combo: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 0.5 } }).toDestination(),
+        success: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' } }).toDestination(),
+        roar: new Tone.PolySynth(Tone.FMSynth, { harmonicity: 0.5, modulationIndex: 10, oscillator: { type: 'sawtooth' }, modulation: { type: 'square' } }).toDestination(),
+        wolf: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0, release: 0.1 } }).toDestination(),
+        jump: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.1 } }).toDestination()
+    };
+
+    // Anime Opening Instruments (High energy rock/synth pop)
+    // Shorten release times drastically to prevent overlap crashes
+    const kick = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 4, envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.01 } }).connect(animeGain);
+    const snare = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.01 } }).connect(animeGain);
+    const hihat = new Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.05, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(animeGain);
+    
+    // Wrap FMSynths in PolySynth to handle rapid notes safely
+    const bass = new Tone.PolySynth(Tone.FMSynth, { 
+        harmonicity: 1, modulationIndex: 2, 
+        oscillator: { type: 'sawtooth' }, modulation: { type: 'square' }, 
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.01 } 
+    }).connect(animeGain);
+    
+    // Scary Ambient Drone
+    const scaryDrone = new Tone.PolySynth(Tone.FMSynth, { 
+        harmonicity: 0.5, modulationIndex: 10, 
+        oscillator: { type: 'sawtooth' }, modulation: { type: 'square' },
+        envelope: { attack: 0.1, decay: 0.1, sustain: 1.0, release: 0.1 }
+    }).connect(scaryGain);
+
+    // Dynamic Soundtrack Loop
+    bgm = new Tone.Part((time, event) => {
+        // Use +0.01 offset for safety if needed, but PolySynth + short envelopes should handle it
+        if (event.k) kick.triggerAttackRelease("C1", "16n", time);
+        if (event.s) snare.triggerAttackRelease("16n", time); 
+        if (event.h) hihat.triggerAttackRelease("32n", time); 
+        if (event.b) bass.triggerAttackRelease(event.b, "16n", time); 
+        if (event.d) scaryDrone.triggerAttackRelease("C2", "2n", time); 
+    }, [
+        // Fast Anime-style 8-beat rock progression
+        { time: "0:0:0", k: true, h: true, b: "C2", d: true },
+        { time: "0:0:2", h: true, b: "C2" },
+        { time: "0:1:0", s: true, h: true, b: "C2" },
+        { time: "0:1:2", h: true, b: "C2" },
+        { time: "0:2:0", k: true, h: true, b: "Eb2" },
+        { time: "0:2:2", k: true, h: true, b: "Eb2" },
+        { time: "0:3:0", s: true, h: true, b: "F2" },
+        { time: "0:3:2", h: true, b: "F2" }
+    ]);
+    bgm.loop = true; bgm.loopEnd = "1m";
+    bgm.start(0); 
+    Tone.Transport.bpm.value = 165; // High energy anime tempo!
+    Tone.Transport.start();
+}
+
+function playSound(synth, note="C2", dur="8n") { 
+    if (synth && synth.triggerAttackRelease) {
+        try {
+            if (synth.noise) {
+                // NoiseSynth expects duration as the first argument, not a note
+                synth.triggerAttackRelease(dur);
+            } else {
+                // Standard synths take (note, duration)
+                synth.triggerAttackRelease(note, dur); 
+            }
+        } catch (e) {
+            console.warn("Audio playback error:", e);
+        }
+    } 
+}
+
+function generateFurTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64; // Low res for retro look
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#666'; ctx.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 1000; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#aaa' : '#333';
+        ctx.fillRect(Math.floor(Math.random() * 32) * 2, Math.floor(Math.random() * 32) * 2, 2, 4);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2, 2);
+    // NearestFilter for crisp, pixelated PS1/N64 style
+    texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter;
+    return texture;
+}
+
+function generateGrassTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 1500; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#388E3C' : '#81C784';
+        ctx.fillRect(Math.floor(Math.random() * 32) * 2, Math.floor(Math.random() * 32) * 2, 2, 2);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(50, 50); // Tile it across the huge ground
+    texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter;
+    return texture;
+}
+
+function getSkyGradient() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2; canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, '#1e4877'); // Top dark blue
+    gradient.addColorStop(0.5, '#4584b4'); // Middle light blue
+    gradient.addColorStop(1, '#87ceeb'); // Horizon bright
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 512);
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+}
+
+function getGroundHeight(x, z) {
+    // Keep center pond area submerged so water shows!
+    if (Math.abs(x) < 18 && Math.abs(z) < 18) {
+        return -1.5;
+    }
+    
+    // Bumpy hills
+    let h = Math.sin(x * 0.1) * 2.0 + Math.cos(z * 0.1) * 2.0;
+    h += Math.sin(x * 0.05 + z * 0.05) * 4.0;
+    
+    // River carving
+    let river1 = Math.abs(x - 40); if (river1 < 5) h -= (5 - river1) * 1.5;
+    let river2 = Math.abs(z + 30); if (river2 < 5) h -= (5 - river2) * 1.5;
+
+    // Blend gently down to the -1.5 deep pond center
+    let dist = Math.hypot(x, z);
+    if (dist < 30) {
+        let blend = (dist - 18) / 12; // 0 at pond edge, 1 at hill edge
+        if (blend < 0) blend = 0;
+        if (blend > 1) blend = 1;
+        return (-1.5 * (1 - blend)) + (h * blend);
+    }
+    return h;
+}
+
+function initScene() {
+    scene = new THREE.Scene();
+    
+    // Apply Gradient Sky
+    scene.background = getSkyGradient();
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.015);
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 150);
+    
+    // Disable antialiasing for authentic retro jagged edges
+    renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.BasicShadowMap; // Hard shadows
+    document.body.appendChild(renderer.domElement);
+
+    // Hemisphere light for vibrant outdoor bounce light (Sky color, Ground color, Intensity)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x44aa44, 0.7); 
+    scene.add(hemiLight);
+    
+    // Warm, bright directional sunlight
+    const sunLight = new THREE.DirectionalLight(0xfff5c0, 1.3);
+    sunLight.position.set(50, 80, 20); sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024; sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.bottom = -80;
+    scene.add(sunLight);
+
+    furBumpMap = generateFurTexture();
+    const grassTex = generateGrassTexture();
+
+    // Ground - Less geometry for a chunkier look
+    const groundGeo = new THREE.PlaneGeometry(200, 200, 50, 50);
+    const groundPos = groundGeo.attributes.position;
+    for (let i = 0; i < groundPos.count; i++) {
+        const x = groundPos.getX(i); const z = groundPos.getY(i);
+        groundPos.setZ(i, getGroundHeight(x, -z)); // Plane is rotated
+    }
+    groundGeo.computeVertexNormals();
+    
+    // Flat shading for retro polygon look with Pixel Grass Texture
+    const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1.0, flatShading: true });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+    scene.add(ground);
+
+    createBeaver();
+    createNatureElements();
+    createNPCs();
+    createDam();
+    
+    // Start with one bear
+    createBear();
+    createWolf();
+
+    generateForest(80); // Increased from 50 to 80 trees
+
+    window.addEventListener('resize', onWindowResize);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.getElementById('restart-btn').addEventListener('click', resetGameFull);
+    
+    mathInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && currentState === STATES.MATH) checkMathAnswer(); });
+    
+    animate();
+}
+
+function createBeaver() {
+    beaver = new THREE.Group();
+    // Low poly style: flat shading, retro mapping
+    const retroProps = { roughness: 1.0, flatShading: true, map: furBumpMap };
+    const furMat = new THREE.MeshStandardMaterial({ color: 0x805530, ...retroProps }); 
+    const darkFur = new THREE.MeshStandardMaterial({ color: 0x4a2a10, ...retroProps });
+    const toothMat = new THREE.MeshStandardMaterial({ color: 0xddddcc, flatShading: true }); 
+
+    // Blocky geometry
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.2, 6), furMat);
+    body.position.y = 0.6; body.castShadow = true; beaver.add(body);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), furMat);
+    head.position.set(0, 1.4, 0.2); head.castShadow = true; beaver.add(head);
+
+    // Front is -Z! Set snout to negative Z so it faces away from camera
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), darkFur);
+    snout.position.set(0, 1.3, -0.6); beaver.add(snout);
+
+    const toothLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.05), toothMat); toothLMesh.position.set(-0.05, 1.15, -0.8); beaver.add(toothLMesh);
+    const toothRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.05), toothMat); toothRMesh.position.set(0.05, 1.15, -0.8); beaver.add(toothRMesh);
+
+    // Tail goes in the back (+Z)
+    tailMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.8), new THREE.MeshStandardMaterial({ color: 0x222222, ...retroProps }));
+    tailMesh.position.set(0, 0.3, 0.6); tailMesh.rotation.x = 0.2; tailMesh.castShadow = true;
+    beaver.add(tailMesh);
+
+    // Dim the flashlight since it's a bright daytime scene now. Target points front (-Z)
+    flashlight = new THREE.SpotLight(0xfff5e6, 0.5, 40, Math.PI / 5, 0.3, 1);
+    flashlight.position.set(0, 1.5, 0); flashlight.target.position.set(0, 1.5, -5); flashlight.castShadow = true;
+    beaver.add(flashlight); beaver.add(flashlight.target);
+
+    scene.add(beaver);
+}
+
+function createNatureElements() {
+    // Flat shading for water - Vibrant blue. Raise slightly so pond at -1.5 is submerged 1 unit deep
+    const universalWater = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x33aacc, transparent: true, opacity: 0.8, flatShading: true }));
+    universalWater.rotation.x = -Math.PI / 2; universalWater.position.y = -0.5; 
+    scene.add(universalWater);
+
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }); // Bright fluffy clouds
+    for (let i = 0; i < 8; i++) {
+        let cloud = new THREE.Group();
+        for (let j = 0; j < 5; j++) {
+            let puff = new THREE.Mesh(new THREE.BoxGeometry(4+Math.random()*4, 3+Math.random()*2, 4+Math.random()*4), cloudMat);
+            puff.position.set((Math.random()-0.5)*6, (Math.random()-0.5)*2, (Math.random()-0.5)*4);
+            cloud.add(puff);
+        }
+        cloud.position.set((Math.random()-0.5)*180, 25 + Math.random()*10, (Math.random()-0.5)*180);
+        scene.add(cloud); clouds.push(cloud);
+    }
+}
+
+function createNPCs() {
+    const retroProps = { roughness: 1.0, flatShading: true, map: furBumpMap };
+    const mooseMat = new THREE.MeshStandardMaterial({ color: 0x4a2c14, ...retroProps });
+    const antlerMat = new THREE.MeshStandardMaterial({ color: 0xaacc88, flatShading: true });
+    const possumMat = new THREE.MeshStandardMaterial({ color: 0x777777, ...retroProps });
+    const turtleMat = new THREE.MeshStandardMaterial({ color: 0x114411, flatShading: true });
+
+    for(let i=0; i<3; i++) {
+        let moose = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 2.5), mooseMat); body.position.y = 1.5; body.castShadow = true; moose.add(body);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 1.2), mooseMat); head.position.set(0, 2.5, 1.5); head.castShadow = true; moose.add(head);
+        const antlerL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.8), antlerMat); antlerL.position.set(-0.8, 3.0, 1.5); moose.add(antlerL);
+        const antlerR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.8), antlerMat); antlerR.position.set(0.8, 3.0, 1.5); moose.add(antlerR);
+        moose.userData = { speed: 0.02 + Math.random()*0.02, turnSpeed: 0.01, type: 'moose', heightOffset: 0 };
+        scene.add(moose); npcs.push(moose);
+    }
+
+    for(let i=0; i<5; i++) {
+        let possum = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 1.2), possumMat); body.position.set(0, 0.4, 0); body.castShadow = true; possum.add(body);
+        possum.userData = { speed: 0.04 + Math.random()*0.03, turnSpeed: 0.05, type: 'possum', heightOffset: 0 };
+        scene.add(possum); npcs.push(possum);
+    }
+
+    for(let i=0; i<4; i++) {
+        let turtle = new THREE.Group();
+        const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.4, 6), turtleMat); shell.position.y = 0.2; shell.castShadow = true; turtle.add(shell);
+        turtle.userData = { speed: 0.01, turnSpeed: 0.005, type: 'turtle', heightOffset: 0 };
+        scene.add(turtle); npcs.push(turtle);
+    }
+
+    npcs.forEach(npc => {
+        npc.position.set((Math.random()-0.5)*150, 0, (Math.random()-0.5)*150);
+        npc.rotation.y = Math.random() * Math.PI * 2;
+    });
+}
+
+function createBear() {
+    let newBear = new THREE.Group();
+    const furMat = new THREE.MeshStandardMaterial({ color: 0x2d1304, roughness: 1.0, flatShading: true, map: furBumpMap });
+    
+    // MASSIVE imposing body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.0, 6.0, 4.0), furMat); 
+    body.position.y = 3.0; body.castShadow = true; newBear.add(body);
+    
+    // Face Forward (-Z) so it looks AT the beaver while chasing
+    const head = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 2.5), furMat); 
+    head.position.set(0, 6.5, -1.0); head.castShadow = true; newBear.add(head);
+
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xcc0000, flatShading: true });
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), eyeMat); 
+    eyeL.position.set(-0.7, 7.0, -2.3); newBear.add(eyeL);
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), eyeMat); 
+    eyeR.position.set(0.7, 7.0, -2.3); newBear.add(eyeR);
+    
+    let mouth = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.0, 1.5), new THREE.MeshStandardMaterial({ color: 0x000000, flatShading: true })); 
+    mouth.position.set(0, 5.5, -1.5); newBear.add(mouth);
+    
+    newBear.userData = { mouth: mouth }; scene.add(newBear); bears.push(newBear);
+    resetBears();
+}
+
+function createWolf() {
+    wolf = new THREE.Group();
+    const furMat = new THREE.MeshStandardMaterial({ color: 0x333344, flatShading: true, map: furBumpMap }); 
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 1.5), furMat); body.position.y = 0.8; body.castShadow = true; wolf.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), furMat); head.position.set(0, 1.6, 0.8); head.castShadow = true; wolf.add(head);
+    scene.add(wolf); resetWolf();
+}
+
+function createDam() {
+    damMesh = new THREE.Group();
+    damMesh.position.set(0, 0, 0);
+    scene.add(damMesh);
+    updateDamUI();
+}
+
+function getTreeMats() {
+    if (!treeMats) {
+        treeMats = {
+            trunk: new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true }),
+            leaf: new THREE.MeshStandardMaterial({ color: 0x33aa44, flatShading: true }),
+            highlight: new THREE.MeshStandardMaterial({ color: 0xffdd00, emissive: 0x664400, flatShading: true }),
+            goldenTrunk: new THREE.MeshStandardMaterial({ color: 0xffcc00, flatShading: true }),
+            goldenLeaf: new THREE.MeshStandardMaterial({ color: 0xffe066, flatShading: true }),
+            goldenHighlight: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0x555500, flatShading: true }),
+            bigTrunk: new THREE.MeshStandardMaterial({ color: 0x5c3a21, flatShading: true }),
+            bigLeaf: new THREE.MeshStandardMaterial({ color: 0x228833, flatShading: true }),
+            bigHighlight: new THREE.MeshStandardMaterial({ color: 0xff4444, emissive: 0x330000, flatShading: true })
+        };
+    }
+    return treeMats;
+}
+
+function spawnTree(isBigTree = false) {
+    const mats = getTreeMats();
+    const isGolden = !isBigTree && Math.random() < 0.15; 
+    
+    let x, z, distToBeaver;
+    do {
+        x = (Math.random() - 0.5) * 160; z = (Math.random() - 0.5) * 160;
+        distToBeaver = beaver ? Math.hypot(x - beaver.position.x, z - beaver.position.z) : 100;
+    } while (Math.hypot(x, z) < 35 || distToBeaver < 20);
+
+    const treeGroup = new THREE.Group();
+    
+    if (isBigTree) {
+        x = (Math.random() > 0.5 ? 1 : -1) * (30 + Math.random() * 30); z = (Math.random() > 0.5 ? 1 : -1) * (30 + Math.random() * 30);
+        treeGroup.position.set(x, getGroundHeight(x, z), z);
+        const bigTrunk = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 3.5, 15, 6).translate(0, 7.5, 0), mats.bigTrunk); bigTrunk.castShadow = true; bigTrunk.receiveShadow = true;
+        const bigLeaves = new THREE.Mesh(new THREE.ConeGeometry(8, 20, 6).translate(0, 20, 0), mats.bigLeaf); bigLeaves.castShadow = true;
+        treeGroup.add(bigTrunk); treeGroup.add(bigLeaves);
+        treeGroup.userData = { isStanding: true, isHighlighted: false, isGolden: false, isBigTree: true, trunkMat: mats.bigTrunk, highlightMat: mats.bigHighlight, fallVelocity: 0 };
+    } else {
+        treeGroup.position.set(x, getGroundHeight(x, z), z);
+        const cTrunkMat = isGolden ? mats.goldenTrunk : mats.trunk, cLeafMat = isGolden ? mats.goldenLeaf : mats.leaf, cHighMat = isGolden ? mats.goldenHighlight : mats.highlight;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 4, 5).translate(0, 2, 0), cTrunkMat); trunk.castShadow = true; trunk.receiveShadow = true;
+        const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 6, 5).translate(0, 5, 0), cLeafMat); leaves.castShadow = true;
+        treeGroup.add(trunk); treeGroup.add(leaves);
+        
+        // Make standard trees heavily vary in size!
+        const scale = 1.0 + Math.random() * 2.5;
+        treeGroup.scale.set(scale, scale, scale);
+
+        treeGroup.userData = { isStanding: true, isHighlighted: false, isGolden: isGolden, isBigTree: false, trunkMat: cTrunkMat, highlightMat: cHighMat, fallVelocity: 0, scaleBase: scale };
+    }
+    scene.add(treeGroup); trees.push(treeGroup);
+}
+
+function generateForest(count) {
+    spawnTree(true);
+    for (let i = 0; i < count; i++) spawnTree(false);
+}
+
+function startGame() { uiIntro.classList.add('hidden'); currentState = STATES.ROAM; msgBox.textContent = "Find a tree. Space to choose."; }
+
+function resetGameFull() {
+    lives = 3; uiLives.textContent = `Lives: ${lives}`; uiGameOver.classList.add('hidden');
+    beaver.position.set(0, 0, 0); isJumping = false; yVelocity = 0; comboCount = 1; treesFalling = [];
+    damLogs = 0; while(damMesh.children.length > 0){ damMesh.remove(damMesh.children[0]); } updateDamUI();
+    resetBears(); resetWolf();
+    trees.forEach(t => scene.remove(t)); trees.length = 0; generateForest(80); // Increased from 50 to 80
+    bears = [bears[0]]; scene.remove(bears[1]); // Remove 2nd bear if it existed
+    currentState = STATES.ROAM; msgBox.textContent = "Find a tree in the fog...";
+}
+
+function onKeyDown(e) {
+    if (currentState === STATES.MATH || currentState === STATES.CAUGHT || currentState === STATES.GAMEOVER) return;
+    if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+
+    if (e.code === 'Space' && currentState === STATES.ROAM) {
+        if (wolfTimer > 0 && beaver.position.distanceTo(wolf.position) < 8.0) { triggerWolfDefense(); return; }
+        // FIX: The added 'return' prevents the Spacebar from bleeding into the QTE check instantly!
+        if (targetTree) { startQTE(targetTree.userData.isBigTree); return; } 
+        else if (!isJumping) { playSound(sounds.jump, "C4", "16n"); isJumping = true; yVelocity = 0.55; return; }
+    }
+
+    if (currentState === STATES.BIG_TREE_RHYTHM || currentState === STATES.FIGHT || currentState === STATES.WOLF_DEFENSE) {
+        if (e.code === 'Space') {
+            if (rhythmProgress >= rhythmTargetStart && rhythmProgress <= rhythmTargetStart + rhythmTargetWidth) {
+                if (currentState === STATES.BIG_TREE_RHYTHM) { uiFight.classList.add('hidden'); triggerTreeFall(); }
+                else if (currentState === STATES.FIGHT) {
+                    uiFight.classList.add('hidden'); currentState = STATES.ROAM; showMessage("ESCAPED!");
+                    isJumping = true; yVelocity = 0.6; beaver.translateZ(-5); resetBears();
+                } else if (currentState === STATES.WOLF_DEFENSE) {
+                    wolfRound++;
+                    if(wolfRound > 4) { uiFight.classList.add('hidden'); currentState = STATES.ROAM; showMessage("WOLF DEFEATED!"); playSound(sounds.success); resetWolf(); }
+                    else { setupWolfRound(); }
+                }
+            } else {
+                if (currentState === STATES.BIG_TREE_RHYTHM) { uiFight.classList.add('hidden'); currentState = STATES.ROAM; showMessage("MISSED!"); }
+                else if (currentState === STATES.FIGHT) { triggerCaught(); }
+                else if (currentState === STATES.WOLF_DEFENSE) { uiFight.classList.add('hidden'); currentState = STATES.ROAM; damLogs = 0; updateDamUI(); resetWolf(); showMessage("WOLF DESTROYED DAM!"); playSound(sounds.fall); }
+            }
+        }
+        return;
+    }
+
+    if (currentState === STATES.QTE) {
+        const expectedKey = qteSequence[qteCurrentIndex];
+        if (e.key.toUpperCase().length > 1) return;
+        if (e.key.toUpperCase() === expectedKey) {
+            playSound(sounds.bite, "E2", "32n");
+            qteContainer.children[qteCurrentIndex].classList.replace('active', 'done');
+            qteCurrentIndex++;
+            if (qteCurrentIndex < qteSequence.length) qteContainer.children[qteCurrentIndex].classList.add('active');
+            else { if (targetTree.userData.isBigTree) { uiQTE.classList.add('hidden'); triggerBigTreeRhythm(); } else triggerTreeFall(); }
+        } else {
+            // MISTAKE! TREE EXPLODES!
+            uiQTE.classList.add('hidden');
+            currentState = STATES.ROAM;
+            showMessage("WRONG KEY! TREE EXPLODED!");
+            playSound(sounds.fall); 
+            
+            // Explosion particles
+            const pMat = new THREE.MeshStandardMaterial({color: 0xff8800, flatShading: true});
+            const pGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            for(let i = 0; i < 15; i++) {
+                let p = new THREE.Mesh(pGeo, pMat);
+                p.position.copy(targetTree.position);
+                p.position.y += 2 + Math.random() * 4;
+                p.userData = { vx: (Math.random()-0.5)*1.5, vy: Math.random()*1.5, vz: (Math.random()-0.5)*1.5 };
+                scene.add(p);
+                explosionParticles.push(p);
+            }
+
+            // Remove destroyed tree and respawn a new one
+            scene.remove(targetTree);
+            let idx = trees.indexOf(targetTree);
+            if (idx > -1) trees.splice(idx, 1);
+            spawnTree(targetTree.userData.isBigTree);
+            targetTree = null;
+        }
+    }
+}
+function onKeyUp(e) { if (keys.hasOwnProperty(e.code)) keys[e.code] = false; }
+
+function resetBears() {
+    bears.forEach(bear => {
+        let angle = Math.random() * Math.PI * 2; let dist = 40 + Math.random() * 20;
+        bear.position.set(beaver.position.x + Math.cos(angle)*dist, 0, beaver.position.z + Math.sin(angle)*dist);
+        bear.position.y = getGroundHeight(bear.position.x, bear.position.z);
+    });
+}
+function resetWolf() {
+    wolf.position.set(0, -10, 0); // Hide underground
+    wolfTimer = 0; uiFight.classList.add('hidden');
+}
+
+function triggerCaught() {
+    currentState = STATES.CAUGHT; cutsceneTimer = 0; uiFight.classList.add('hidden'); msgBox.textContent = "OH NO! THE BEAR!"; playSound(sounds.roar, "C1", "1m");
+    for (let k in keys) keys[k] = false; isJumping = false; beaver.position.y = getGroundHeight(beaver.position.x, beaver.position.z);
+}
+
+function startQTE(isBigTree = false) { currentState = STATES.QTE; uiQTE.classList.remove('hidden'); generateQTE(isBigTree); }
+function generateQTE(isBigTree = false) {
+    // Utilize the entire alphabet for typing QTE
+    const pKeys = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+    const len = isBigTree ? (8 + Math.floor(Math.random()*4)) : (4 + Math.floor(Math.random()*3));
+    qteSequence = []; qteCurrentIndex = 0; qteContainer.innerHTML = '';
+    for (let i = 0; i < len; i++) {
+        let k = pKeys[Math.floor(Math.random()*pKeys.length)]; qteSequence.push(k);
+        let span = document.createElement('span'); span.className = `qte-key ${i===0?'active':''}`; span.textContent = k; qteContainer.appendChild(span);
+    }
+}
+
+function triggerTreeFall() {
+    uiQTE.classList.add('hidden'); currentState = STATES.FALLING; comboCount = 1; treesFalling = []; playSound(sounds.fall);
+    window.mathTimeoutSet = false;
+    if (targetTree.userData.isGolden) {
+        const scale = 1.0 + Math.random() * 2.0; tailMesh.scale.set(scale, scale, scale); showMessage("GOLDEN TREE! TAIL MUTATED!");
+    }
+    startFalling(targetTree, beaver.position);
+}
+function startFalling(tree, originPoint) {
+    tree.userData.isStanding = false; tree.userData.fallVelocity = 0; tree.userData.fallAngle = 0;
+    const fallDir = new THREE.Vector3().subVectors(tree.position, originPoint); fallDir.y = 0; 
+    if (fallDir.lengthSq() === 0) fallDir.set(0, 0, -1); // Failsafe for zero-distance
+    fallDir.normalize();
+    tree.userData.fallAxis = new THREE.Vector3(fallDir.z, 0, -fallDir.x).normalize();
+    tree.userData.fallDirection = fallDir; tree.userData.comboChecked = false; treesFalling.push(tree);
+}
+
+function startMathTimer() {
+    mathTimeLeft = 30.0; uiTimer.textContent = `Time: 30.0s`; clearInterval(mathInterval);
+    mathInterval = setInterval(() => {
+        mathTimeLeft -= 0.1; uiTimer.textContent = `Time: ${mathTimeLeft.toFixed(1)}s`;
+        if(mathTimeLeft <= 0) { clearInterval(mathInterval); mathFeedback.textContent = "OUT OF TIME! Try again!"; mathInput.value = ''; showMathProblem(); }
+    }, 100);
+}
+
+function showMathProblem() {
+    currentState = STATES.MATH; uiMath.classList.remove('hidden'); mathInput.value = ''; mathFeedback.textContent = '';
+    if (comboCount > 1) {
+        const ops = ['+', '-', '*', '/']; const op = ops[Math.floor(Math.random()*ops.length)];
+        let n1, n2;
+        if (op === '+') { n1 = Math.floor(Math.random()*50)+1; n2 = Math.floor(Math.random()*50)+1; currentMathAnswer = n1+n2; mathQuestion.textContent = `COMBO! ${n1} + ${n2}?`; }
+        else if (op === '-') { n1 = Math.floor(Math.random()*50)+20; n2 = Math.floor(Math.random()*n1); currentMathAnswer = n1-n2; mathQuestion.textContent = `COMBO! ${n1} - ${n2}?`; }
+        else if (op === '*') { n1 = Math.floor(Math.random()*12)+1; n2 = Math.floor(Math.random()*12)+1; currentMathAnswer = n1*n2; mathQuestion.textContent = `COMBO! ${n1} × ${n2}?`; }
+        else if (op === '/') { n2 = Math.floor(Math.random()*12)+1; n1 = n2 * (Math.floor(Math.random()*12)+1); currentMathAnswer = n1/n2; mathQuestion.textContent = `COMBO! ${n1} ÷ ${n2}?`; }
+    } else {
+        const cCm = Math.floor(Math.random()*99)+1; currentMathAnswer = cCm*10; mathQuestion.textContent = `Convert ${cCm} cm to mm:`;
+    }
+    startMathTimer(); setTimeout(() => mathInput.focus(), 100);
+}
+
+function checkMathAnswer() {
+    if (parseInt(mathInput.value) === currentMathAnswer) {
+        clearInterval(mathInterval); uiMath.classList.add('hidden'); playSound(sounds.success, ["C4","E4","G4"]); startDance();
+    } else {
+        mathFeedback.textContent = comboCount>1 ? `Incorrect combo math!` : `Hint: multiply by 10!`; mathInput.value = '';
+    }
+}
+
+function startDance() {
+    currentState = STATES.DANCING; danceTime = 0; showMessage("YAY! SOUL FREED.");
+    let addedLogs = comboCount; damLogs += addedLogs; updateDamUI();
+    
+    // Add visually to dam
+    for(let i=0; i<addedLogs; i++) {
+        let log = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2, 5), getTreeMats().trunk);
+        log.rotation.z = Math.PI/2; log.rotation.y = Math.random()*Math.PI; log.position.set((Math.random()-0.5)*5, Math.min(damLogs/4, 4), (Math.random()-0.5)*5);
+        damMesh.add(log);
+    }
+    
+    if (damLogs >= 10 && bears.length === 1) { createBear(); showMessage("ANOTHER BEAR APPEARED!"); }
+    if (damLogs >= 20) { uiGameOver.classList.remove('hidden'); document.getElementById('game-over-title').textContent="YOU WIN!"; document.getElementById('game-over-desc').textContent="The dam is complete!"; currentState = STATES.GAMEOVER; return; }
+
+    let bF = false, nF = 0;
+    for (let i = trees.length-1; i >= 0; i--) { if (!trees[i].userData.isStanding) { if(trees[i].userData.isBigTree) bF = true; else nF++; scene.remove(trees[i]); trees.splice(i, 1); } }
+    if (bF) spawnTree(true); for(let i=0; i<nF; i++) spawnTree(false);
+
+    if (damLogs > 0 && Math.random() < 0.7 && wolfTimer === 0) {
+        wolf.position.set(0, 0, 0); wolfTimer = 1800; showMessage("A WOLF IS ATTACKING THE DAM!"); playSound(sounds.wolf, "C2");
+    }
+}
+function updateDamUI() { uiDam.textContent = `Dam: ${damLogs} / 20 Logs`; }
+function showMessage(t) { msgBox.textContent = t; }
+
+function setupRhythm(title, speed, width) {
+    rhythmProgress = 0; rhythmTargetStart = 20 + Math.random()*50; rhythmTargetWidth = width; rhythmSpeed = speed;
+    fightTitle.textContent = title; document.getElementById('rhythm-zone').style.left = rhythmTargetStart+'%'; document.getElementById('rhythm-zone').style.width = rhythmTargetWidth+'%'; document.getElementById('rhythm-cursor').style.left = '0%';
+    uiFight.classList.remove('hidden');
+}
+function triggerBigTreeRhythm() { currentState = STATES.BIG_TREE_RHYTHM; setupRhythm("FINAL STRIKE!", 1.2, 12); }
+function triggerFight() { currentState = STATES.FIGHT; setupRhythm("BEAR ATTACK!", 1.0, 15); fightSubtitle.textContent = ""; }
+function triggerWolfDefense() { currentState = STATES.WOLF_DEFENSE; wolfRound = 1; setupWolfRound(); }
+function setupWolfRound() { setupRhythm("DEFEND DAM!", 0.5 + (wolfRound*0.2), 18 - (wolfRound*2)); fightSubtitle.textContent = `Round ${wolfRound}/4`; }
+
+function checkCombos() {
+    for (let i = 0; i < treesFalling.length; i++) {
+        let ft = treesFalling[i];
+        
+        // Use explicitly tracked fallAngle instead of unpredictable 3D euler angles
+        if (!ft.userData.comboChecked && ft.userData.fallAngle > Math.PI / 4) {
+            ft.userData.comboChecked = true;
+            const fM = ft.userData.isBigTree ? 8 : 4;
+            const fP = new THREE.Vector3().copy(ft.position).add(ft.userData.fallDirection.clone().multiplyScalar(fM));
+            
+            let comboHit = false; // Prevent massive audio overlap crashes
+            for (let j = 0; j < trees.length; j++) {
+                let st = trees[j];
+                if (st.userData.isStanding && fP.distanceTo(st.position) < (ft.userData.isBigTree ? COMBO_DIST*3 : COMBO_DIST)) {
+                    startFalling(st, ft.position); comboCount++; comboHit = true;
+                }
+            }
+            if (comboHit) {
+                playSound(sounds.combo, "C5");
+                comboMsg.textContent = `COMBO! x${comboCount}`; comboMsg.style.opacity=1; comboMsg.style.transform='scale(1.5)';
+                setTimeout(()=>{comboMsg.style.transform='scale(1)'; comboMsg.style.opacity=0;}, 1500);
+            }
+        }
+    }
+}
+
+function updateCamera() {
+    // Rigid lock behind beaver
+    const offset = new THREE.Vector3(0, 4.0, 8.5);
+    const cameraPos = offset.applyMatrix4(beaver.matrixWorld);
+    camera.position.lerp(cameraPos, 0.2); 
+    
+    // Prevent camera from clipping through the terrain hills when beaver is low
+    const camGroundHeight = getGroundHeight(camera.position.x, camera.position.z);
+    if (camera.position.y < camGroundHeight + 1.5) {
+        camera.position.y = camGroundHeight + 1.5;
+    }
+
+    const lookAt = beaver.position.clone(); lookAt.y += 1.5; camera.lookAt(lookAt);
+}
+
+function updateNPCs() {
+    npcs.forEach(npc => {
+        npc.translateZ(npc.userData.speed); npc.rotation.y += npc.userData.turnSpeed;
+        npc.position.y = getGroundHeight(npc.position.x, npc.position.z) + npc.userData.heightOffset;
+        if (Math.abs(npc.position.x) > 90 || Math.abs(npc.position.z) > 90) npc.rotation.y += Math.PI;
+    });
+}
+
+function updateRoamState() {
+    if (wolfTimer > 0) {
+        wolfTimer--;
+        if (wolfTimer === 0) { damLogs = 0; updateDamUI(); resetWolf(); showMessage("WOLF DESTROYED THE DAM!"); playSound(sounds.fall); }
+        else if (wolfTimer % 60 === 0) msgBox.textContent = `WOLF AT DAM! TIME: ${Math.floor(wolfTimer/60)}`;
+    }
+
+    let currentFloorY = getGroundHeight(beaver.position.x, beaver.position.z);
+    
+    // Rigid jumping logic strictly respecting ground
+    if (isJumping) {
+        beaver.position.y += yVelocity; yVelocity -= 0.025;
+        if (beaver.position.y <= currentFloorY) { beaver.position.y = currentFloorY; isJumping = false; yVelocity = 0; }
+    } else {
+        beaver.position.y = currentFloorY;
+    }
+
+    for (let bear of bears) {
+        const bt = beaver.position.clone(); bt.y = bear.position.y; bear.lookAt(bt);
+        bear.translateZ(0.12); bear.position.y = getGroundHeight(bear.position.x, bear.position.z);
+        if (bear.position.distanceTo(beaver.position) < 2.5) {
+            // Check relative height to dodge
+            if (beaver.position.y < currentFloorY + 1.2) { triggerFight(); return; }
+        }
+    }
+
+    // Movement (Local -Z is forward)
+    if (keys.ArrowUp) { beaver.translateZ(-MOVE_SPEED); beaver.rotation.z = Math.sin(Date.now()*0.01)*0.1; } 
+    else if (keys.ArrowDown) { beaver.translateZ(MOVE_SPEED * 0.5); beaver.rotation.z = Math.sin(Date.now()*0.01)*0.1; } 
+    else { beaver.rotation.z = 0; }
+
+    if (keys.ArrowLeft) beaver.rotation.y += ROTATE_SPEED;
+    if (keys.ArrowRight) beaver.rotation.y -= ROTATE_SPEED;
+
+    if (beaver.position.x > 90) beaver.position.x = 90; if (beaver.position.x < -90) beaver.position.x = -90;
+    if (beaver.position.z > 90) beaver.position.z = 90; if (beaver.position.z < -90) beaver.position.z = -90;
+
+    let cDist = Infinity, cTree = null;
+    for (let tree of trees) {
+        if (!tree.userData.isStanding) continue;
+        if (tree.userData.isHighlighted) { tree.children[0].material = tree.userData.trunkMat; tree.userData.isHighlighted = false; }
+        let dist = beaver.position.distanceTo(tree.position);
+        const bDir = new THREE.Vector3(0,0,-1).applyQuaternion(beaver.quaternion);
+        const toT = new THREE.Vector3().subVectors(tree.position, beaver.position).normalize();
+        const dot = bDir.dot(toT);
+        const iRad = tree.userData.isBigTree ? INTERACT_DIST * 2.2 : INTERACT_DIST;
+        if (dist < iRad && dot > 0.5 && dist < cDist) { cDist = dist; cTree = tree; }
+    }
+    targetTree = cTree;
+    if (targetTree) { targetTree.children[0].material = targetTree.userData.highlightMat; targetTree.userData.isHighlighted = true; if(wolfTimer===0)msgBox.textContent = "Press SPACE to bite"; }
+}
+
+function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Dynamic Music Controller: Fade between Anime Intro and Scary based on bear distance
+    if (animeGain && scaryGain && bears.length > 0) {
+        let minBearDist = Math.min(...bears.map(b => b.position.distanceTo(beaver.position)));
+        
+        // Start crossfading when the bear is within 50 units
+        let fade = Math.max(0, Math.min(1, (50 - minBearDist) / 40)); 
+        animeGain.volume.value = -12 - (fade * 60); // Fades anime music down
+        scaryGain.volume.value = -60 + (fade * 50); // Fades scary music up to -10db
+    }
+
+    if (currentState === STATES.ROAM) updateRoamState();
+    else if ([STATES.FIGHT, STATES.BIG_TREE_RHYTHM, STATES.WOLF_DEFENSE].includes(currentState)) {
+        if(bears[0]) bears[0].lookAt(beaver.position);
+        rhythmProgress += rhythmSpeed; document.getElementById('rhythm-cursor').style.left = rhythmProgress + '%';
+        if (rhythmProgress > 100) { 
+            if (currentState === STATES.BIG_TREE_RHYTHM) { uiFight.classList.add('hidden'); currentState = STATES.ROAM; showMessage("TOO SLOW!"); }
+            else if (currentState === STATES.FIGHT) { triggerCaught(); }
+            else if (currentState === STATES.WOLF_DEFENSE) { uiFight.classList.add('hidden'); currentState = STATES.ROAM; damLogs = 0; updateDamUI(); resetWolf(); showMessage("WOLF DESTROYED DAM!"); playSound(sounds.fall); }
+        }
+    }
+    else if (currentState === STATES.CAUGHT) {
+        cutsceneTimer++; const bt = beaver.position.clone(); bt.y = bears[0].position.y; bears[0].lookAt(bt);
+        if (cutsceneTimer < 30) { bears[0].translateZ(0.08); } 
+        else if (cutsceneTimer < 60) { beaver.scale.setScalar(Math.max(0, 1 - ((cutsceneTimer - 30)/20))); } 
+        else if (cutsceneTimer > 120) {
+            lives--; uiLives.textContent = `Lives: ${lives}`;
+            if (lives > 0) { currentState = STATES.ROAM; beaver.scale.setScalar(1); beaver.position.set(0, 0, 0); resetBears(); msgBox.textContent = "Find a tree..."; } 
+            else { currentState = STATES.GAMEOVER; uiGameOver.classList.remove('hidden'); msgBox.textContent = ""; }
+        }
+    }
+    else if (currentState === STATES.FALLING) {
+        let allFallen = true; checkCombos();
+        for (let tree of treesFalling) {
+            if (tree.userData.fallAngle < Math.PI / 2) {
+                if (tree.userData.fallVelocity < 0.05) tree.userData.fallVelocity += 0.002;
+                tree.rotateOnWorldAxis(tree.userData.fallAxis, tree.userData.fallVelocity);
+                tree.userData.fallAngle += tree.userData.fallVelocity;
+                allFallen = false;
+            }
+        }
+        
+        // Safely trigger Math state transition exactly once
+        if (allFallen && !window.mathTimeoutSet) {
+            window.mathTimeoutSet = true;
+            setTimeout(() => { if (currentState === STATES.FALLING) showMathProblem(); }, 500);
+        }
+    }
+    else if (currentState === STATES.DANCING) {
+        danceTime += 0.1; beaver.rotation.y += 0.2; beaver.position.y = getGroundHeight(beaver.position.x, beaver.position.z) + Math.abs(Math.sin(danceTime)) * 1.5;
+        if (danceTime > 15) { beaver.position.y = getGroundHeight(beaver.position.x, beaver.position.z); currentState = STATES.ROAM; msgBox.textContent = "Find another tree..."; }
+    }
+
+    // Process Tree Explosion Particles
+    for (let i = explosionParticles.length - 1; i >= 0; i--) {
+        let p = explosionParticles[i];
+        p.position.x += p.userData.vx;
+        p.position.y += p.userData.vy;
+        p.position.z += p.userData.vz;
+        p.userData.vy -= 0.05; // gravity
+        p.scale.multiplyScalar(0.9);
+        if (p.scale.x < 0.1) { scene.remove(p); explosionParticles.splice(i, 1); }
+    }
+
+    for (let cloud of clouds) { cloud.position.x += 0.05; if (cloud.position.x > 150) cloud.position.x = -150; }
+    if (currentState !== STATES.INIT) updateNPCs();
+    updateCamera();
+    renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

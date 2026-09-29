@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bunny Barrel Run 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Henny+Penny&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #aed9e0;
+            font-family: 'Henny Penny', cursive;
+            user-select: none;
+            touch-action: none;
+        }
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        .text-shadow {
+            text-shadow: 2px 2px 0px #fff, -2px -2px 0px #fff, 2px -2px 0px #fff, -2px 2px 0px #fff, 4px 4px 5px rgba(0,0,0,0.5);
+        }
+        .overlay-card {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.95);
+            border: 8px solid #8b4513;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .hide-cursor {
+            cursor: none !important;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            border: 3px solid red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    <div id="crosshair"></div>
+
+    <div id="uiLayer" class="p-4">
+        
+        <!-- Generic Top HUD -->
+        <div id="topHud" class="flex justify-between items-start w-full hidden">
+            <div class="text-3xl text-yellow-600 text-shadow font-bold bg-white bg-opacity-70 px-4 py-2 rounded-xl border-2 border-yellow-800">
+                <span id="hudPhaseText">Phase X</span> | <span id="hudProgressText">Score: 0/0</span>
+            </div>
+            <!-- Phase 3 / 5 Specific extra info -->
+            <div id="hudExtra" class="text-3xl text-red-600 text-shadow font-bold bg-white bg-opacity-70 px-4 py-2 rounded-xl border-2 border-red-800 hidden">
+            </div>
+        </div>
+
+        <!-- Overlays -->
+        <div id="overlayContainer" class="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+            
+            <!-- Start Screen -->
+            <div id="startScreen" class="overlay-card flex flex-col items-center p-8 max-w-lg text-center transform transition-transform duration-300 scale-100">
+                <h1 class="text-5xl text-yellow-700 mb-4 text-shadow" style="-webkit-text-stroke: 1px black;">Bunny Barrel Run</h1>
+                <p class="text-xl text-gray-800 mb-6">Phase 1: Roll your barrel! Collect 30 chocolate bars to advance. Dodge the carriers!</p>
+                <div class="text-md text-gray-600 mb-6 text-left w-full bg-white bg-opacity-50 p-4 rounded-lg border-2 border-yellow-800 border-dashed">
+                    <p><strong>Controls:</strong></p>
+                    <p>Keyboard: ⬅️ ➡️ to move, SPACE to jump</p>
+                </div>
+                <button id="startBtn" class="px-8 py-3 bg-green-500 hover:bg-green-600 text-white text-2xl rounded-full border-4 border-green-800 shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">Play Game</button>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="gameOverScreen" class="overlay-card flex flex-col items-center p-8 max-w-md text-center transform transition-transform duration-300 scale-0 hidden">
+                <h2 class="text-5xl text-red-600 mb-4 text-shadow" style="-webkit-text-stroke: 1px black;">Oh No!</h2>
+                <p id="gameOverReason" class="text-2xl text-gray-800 mb-6">You failed!</p>
+                <button id="restartBtn" class="px-8 py-3 bg-yellow-500 hover:bg-yellow-600 text-white text-2xl rounded-full border-4 border-yellow-800 shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">Try Again</button>
+            </div>
+
+            <!-- Generic Transition Screen -->
+            <div id="transitionScreen" class="overlay-card flex flex-col items-center p-8 max-w-lg text-center transform transition-transform duration-300 scale-0 hidden">
+                <h2 id="transTitle" class="text-5xl text-blue-600 mb-4 text-shadow" style="-webkit-text-stroke: 1px black;">Phase X</h2>
+                <p id="transDesc" class="text-xl text-gray-800 mb-4">Description goes here!</p>
+                <button id="nextPhaseBtn" class="px-8 py-3 bg-blue-500 hover:bg-blue-600 text-white text-2xl rounded-full border-4 border-blue-800 shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">Start Phase</button>
+            </div>
+
+            <!-- Win Screen -->
+            <div id="winScreen" class="overlay-card flex flex-col items-center p-8 max-w-md text-center transform transition-transform duration-300 scale-0 hidden">
+                <h2 class="text-5xl text-green-600 mb-4 text-shadow" style="-webkit-text-stroke: 1px black;">You Won!</h2>
+                <p class="text-2xl text-gray-800 mb-6">You completed all 5 phases!</p>
+                <button id="winRestartBtn" class="px-8 py-3 bg-green-500 hover:bg-green-600 text-white text-2xl rounded-full border-4 border-green-800 shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">Play Again</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- Core Variables ---
+        let scene, camera, renderer, clock;
+        let gameState = 'START'; 
+        let currentPhase = 1;
+        let animationId;
+        
+        // --- Input State ---
+        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        let actionJustPressed = false; 
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        let isMouseDown = false;
+
+        // --- Shared Colors & Helpers ---
+        const colors = {
+            white: 0xffffff, black: 0x222222,
+            barrel: 0xd98b36, barrelRim: 0x5c3a21,
+            jacket: 0x1a1a1a, overalls: 0x547b99, overalls2: 0x8e44ad, overalls3: 0xe67e22, overalls4: 0x3498db,
+            bucket: 0xb33939, bucketRim: 0x8b1e1e,
+            chocolate: 0x4a2511, chocoBar: 0x6a3e1e,
+            grass: 0x7bb35c, path: 0xe8d2a6, sky: 0xaed9e0, gloves: 0xffeaa7,
+            cauldron: 0xc29b62, fire: 0xff5722, fire2: 0xffeb3b, spoon: 0xe0e0e0,
+            mushroomStem: 0xf5deb3, mushroomCap: 0x8b4513
+        };
+        const eggColors = [0xffb3ba, 0xffdfba, 0xffffba, 0xbaffc9, 0xbae1ff];
+
+        const getMaterial = (color) => new THREE.MeshStandardMaterial({ color: color, roughness: 0.8, metalness: 0.1 });
+
+        // --- Memory Cleanup ---
+        function disposeGroup(group) {
+            if(!group) return;
+            group.traverse(child => {
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        const disposeMat = (m) => { if (m.map) m.map.dispose(); m.dispose(); };
+                        if (Array.isArray(child.material)) child.material.forEach(disposeMat);
+                        else disposeMat(child.material);
+                    }
+                }
+            });
+        }
+
+        // --- 3D Builders ---
+        function createBunnyBody(outfitColor = colors.jacket) {
+            const group = new THREE.Group();
+            const head = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), getMaterial(colors.white));
+            head.position.y = 3; group.add(head);
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), getMaterial(colors.black));
+            nose.position.set(0, 3, 1.5); group.add(nose);
+            const earMat = getMaterial(colors.white);
+            const earL = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 3.3, 8), earMat);
+            earL.position.set(-0.8, 5, 0); earL.rotation.z = Math.PI / 8; group.add(earL);
+            const earR = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 3.3, 8), earMat);
+            earR.position.set(0.8, 5, 0); earR.rotation.z = -Math.PI / 8; group.add(earR);
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.3, 3.5, 16), getMaterial(outfitColor));
+            body.position.y = 0.5; group.add(body);
+            const tail = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8), getMaterial(colors.white));
+            tail.position.set(0, 0, -1.2); group.add(tail);
+            const limbGeo = new THREE.CylinderGeometry(0.35, 0.35, 2, 8);
+            const whiteMat = getMaterial(colors.white);
+            const legL = new THREE.Mesh(limbGeo, whiteMat); legL.position.set(-0.6, -1.5, 0); group.add(legL);
+            const legR = new THREE.Mesh(limbGeo, whiteMat); legR.position.set(0.6, -1.5, 0); group.add(legR);
+            const armMat = getMaterial(outfitColor === colors.white ? colors.white : outfitColor);
+            const armL = new THREE.Mesh(limbGeo, armMat); armL.position.set(-1.5, 1, 0); armL.rotation.z = Math.PI / 4; group.add(armL);
+            const armR = new THREE.Mesh(limbGeo, armMat); armR.position.set(1.5, 1, 0); armR.rotation.z = -Math.PI / 4; group.add(armR);
+
+            group.userData = { legL, legR, armL, armR, earL, earR, body, head };
+            return group;
+        }
+
+        // --- Phase Variables ---
+        // P1
+        let p1Score = 0; const P1_TARGET = 30; let playerObj, p1Enemies = [], p1Collectibles = [], p1Scenery = [];
+        let p1EnemyTimer = 0, p1EnemyInterval = 1200, p1ColTimer = 0, p1ColInterval = 800; let p1Speed = 60;
+        
+        // P2
+        let p2EggsCollected = 0; const P2_TARGET = 5; let p2Bunny, p2Spoon, p2CauldronSurface;
+        let p2Eggs = [], p2EggTimer = 0;
+        
+        // P3
+        let p3Hits = 0; const P3_TARGET = 10; let p3Lives = 3; let p3Target, p3Commander, p3Projectiles = [];
+        
+        // P4
+        let p4Combo = 0; const P4_TARGET = 25; let p4Eggs = [], p4HitRing; let p4Timer = 0;
+        
+        // P5
+        let p5Sculptures = [], p5ActiveTargets = [], p5Round = 1, p5Timer = 10.0;
+
+        class P1Player {
+            constructor() {
+                this.group = new THREE.Group(); this.vx = 0; this.vy = 0; this.isJumping = false; this.runCycle = 0;
+                this.barrelGroup = new THREE.Group();
+                const barrelGeo = new THREE.CylinderGeometry(3, 3, 8, 20); barrelGeo.rotateZ(Math.PI / 2);
+                this.barrelGroup.add(new THREE.Mesh(barrelGeo, getMaterial(colors.barrel)));
+                const rimGeo = new THREE.TorusGeometry(3.1, 0.2, 8, 20);
+                const rim1 = new THREE.Mesh(rimGeo, getMaterial(colors.barrelRim)); rim1.position.x = -3; rim1.rotation.y = Math.PI / 2;
+                const rim2 = new THREE.Mesh(rimGeo, getMaterial(colors.barrelRim)); rim2.position.x = 3; rim2.rotation.y = Math.PI / 2;
+                this.barrelGroup.add(rim1); this.barrelGroup.add(rim2);
+                this.barrelGroup.position.y = 3; this.group.add(this.barrelGroup);
+                this.bunny = createBunnyBody(colors.jacket); this.bunny.position.y = 7; this.group.add(this.bunny);
+                this.box = new THREE.Box3(); scene.add(this.group);
+            }
+            update(dt) {
+                let dir = 0;
+                if (keys.ArrowLeft) dir = -1; if (keys.ArrowRight) dir = 1;
+                this.vx += dir * 40 * dt * 10; this.vx *= 0.85; 
+                this.group.position.x += this.vx * dt;
+                if (this.group.position.x > 17) this.group.position.x = 17;
+                if (this.group.position.x < -17) this.group.position.x = -17;
+
+                if (actionJustPressed && !this.isJumping) { this.vy = 60; this.isJumping = true; }
+                this.vy += -150 * dt; this.group.position.y += this.vy * dt;
+                if (this.group.position.y < 0) { this.group.position.y = 0; this.vy = 0; this.isJumping = false; }
+
+                this.runCycle += dt * 15;
+                this.barrelGroup.rotation.x -= (p1Speed * dt * (this.isJumping?0.5:1)) / 3;
+                const u = this.bunny.userData;
+                if (this.isJumping) {
+                    u.legL.rotation.x = -Math.PI/4; u.legR.rotation.x = Math.PI/4;
+                } else {
+                    u.legL.rotation.x = Math.sin(this.runCycle)*0.8; u.legR.rotation.x = Math.sin(this.runCycle+Math.PI)*0.8;
+                    this.bunny.position.y = 7 + Math.abs(Math.sin(this.runCycle)) * 0.5;
+                }
+                this.box.setFromCenterAndSize(new THREE.Vector3(this.group.position.x, this.group.position.y+3.5, this.group.position.z), new THREE.Vector3(4.5, 7, 4.5));
+            }
+        }
+
+        class P1Enemy {
+            constructor(x) {
+                this.group = new THREE.Group(); this.markedForDeletion = false;
+                this.bunny = createBunnyBody(colors.overalls); this.bunny.rotation.y = Math.PI; this.bunny.position.y = 1.5;
+                this.group.add(this.bunny);
+                const bucket = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.9, 2.5, 16), getMaterial(colors.bucket));
+                bucket.position.set(0, 3, 2); this.group.add(bucket);
+                this.group.position.set(x, 0, -150); scene.add(this.group);
+                this.speed = p1Speed + 15 + Math.random()*20; this.runCycle = Math.random()*Math.PI; this.hitboxes = [];
+            }
+            update(dt) {
+                this.group.position.z += this.speed * dt;
+                if (this.group.position.z > 20) this.markedForDeletion = true;
+                this.runCycle += dt*15;
+                const u = this.bunny.userData;
+                u.legL.rotation.x = Math.sin(this.runCycle)*0.8; u.legR.rotation.x = Math.sin(this.runCycle+Math.PI)*0.8;
+                this.bunny.position.y = 1.5 + Math.abs(Math.sin(this.runCycle))*0.4;
+                const pos = new THREE.Vector3(); this.group.children[1].getWorldPosition(pos);
+                this.hitboxes = [new THREE.Box3().setFromCenterAndSize(pos, new THREE.Vector3(2.5, 3.0, 2.5))];
+            }
+        }
+
+        class P1Collectible {
+            constructor(x) {
+                this.group = new THREE.Group(); this.markedForDeletion = false;
+                this.mesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 0.8), getMaterial(colors.chocoBar));
+                this.mesh.position.y = 2; this.group.add(this.mesh);
+                this.group.position.set(x, 0, -150); scene.add(this.group); this.box = new THREE.Box3();
+            }
+            update(dt) {
+                this.group.position.z += p1Speed * dt;
+                if (this.group.position.z > 20) this.markedForDeletion = true;
+                this.mesh.rotation.y += dt*3; this.mesh.rotation.x += dt*1.5;
+                const pos = new THREE.Vector3(); this.mesh.getWorldPosition(pos);
+                this.box.setFromCenterAndSize(pos, new THREE.Vector3(3, 3, 3));
+            }
+        }
+
+        class P2Spoon {
+            constructor() {
+                this.group = new THREE.Group(); this.isFull = false;
+                const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 6, 8), getMaterial(colors.spoon));
+                handle.rotation.x = Math.PI/2; handle.position.z = 3; this.group.add(handle);
+                this.scoop = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 16, 0, Math.PI*2, 0, Math.PI/2), getMaterial(colors.spoon));
+                this.scoop.rotation.x = Math.PI; this.group.add(this.scoop);
+                this.eggContent = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), getMaterial(0xffffff));
+                this.eggContent.scale.set(1, 1.4, 1); this.eggContent.visible = false; this.group.add(this.eggContent);
+                this.group.rotation.x = Math.PI/6; this.group.scale.set(1.5, 1.5, 1.5);
+                scene.add(this.group);
+            }
+            catch(color) { this.isFull = true; this.eggContent.material.color.setHex(color); this.eggContent.visible = true; }
+            empty() { this.isFull = false; this.eggContent.visible = false; }
+        }
+
+        class P2JumpingEgg {
+            constructor() {
+                this.color = eggColors[Math.floor(Math.random()*eggColors.length)];
+                this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), getMaterial(this.color));
+                this.mesh.scale.set(1, 1.4, 1);
+                const angle = Math.random()*Math.PI*2, r = Math.random()*12;
+                this.startX = Math.cos(angle)*r; this.startZ = Math.sin(angle)*r;
+                this.mesh.position.set(this.startX, 10.5, this.startZ);
+                
+                this.warningMesh = new THREE.Mesh(new THREE.CircleGeometry(2.5, 32), new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.6}));
+                this.warningMesh.rotation.x = -Math.PI/2; this.warningMesh.position.set(this.startX, 10.6, this.startZ);
+                scene.add(this.warningMesh);
+                
+                this.state = 'WARNING'; this.timer = 0; this.mesh.visible = false;
+                this.vy = 80 + Math.random()*20; this.vx = (Math.random()-0.5)*2; this.vz = (Math.random()-0.5)*2;
+                this.markedForDeletion = false; scene.add(this.mesh);
+            }
+            update(dt) {
+                if (this.state === 'WARNING') {
+                    this.timer += dt;
+                    const scale = 1 + Math.sin(this.timer*15)*0.3; this.warningMesh.scale.set(scale, scale, scale);
+                    if (this.timer > 1.0) {
+                        this.state = 'JUMPING'; this.mesh.visible = true;
+                        if(this.warningMesh.parent) scene.remove(this.warningMesh); disposeGroup(this.warningMesh);
+                    }
+                } else {
+                    this.vy -= 180 * dt; 
+                    this.mesh.position.y += this.vy*dt; this.mesh.position.x += this.vx*dt; this.mesh.position.z += this.vz*dt;
+                    this.mesh.rotation.x += dt*3; this.mesh.rotation.z += dt*2;
+                    if (this.mesh.position.y < 10 && this.vy < 0) this.markedForDeletion = true;
+                }
+            }
+            dispose() {
+                if(this.warningMesh.parent) scene.remove(this.warningMesh); disposeGroup(this.warningMesh);
+                if(this.mesh.parent) scene.remove(this.mesh); disposeGroup(this.mesh);
+            }
+        }
+
+        class P3Target {
+            constructor() {
+                this.group = new THREE.Group();
+                const egg = new THREE.Mesh(new THREE.SphereGeometry(12, 32, 32), getMaterial(colors.chocolate));
+                egg.scale.set(1, 1.4, 1);
+                egg.position.y = 12;
+                this.group.add(egg);
+                
+                // Target Spot
+                this.spot = new THREE.Mesh(new THREE.CircleGeometry(3, 32), new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide}));
+                this.spot.position.set(0, 15, 12.1);
+                this.group.add(this.spot);
+                
+                this.group.position.set(0, 0, -20);
+                scene.add(this.group);
+                this.currentColor = colors.white;
+            }
+            setRandomTarget() {
+                const angle = Math.random() * Math.PI*2;
+                const r = Math.random() * 8;
+                this.spot.position.set(Math.cos(angle)*r, 15 + Math.sin(angle)*r, 12.1);
+                this.currentColor = eggColors[Math.floor(Math.random()*eggColors.length)];
+                this.spot.material.color.setHex(this.currentColor);
+            }
+        }
+
+        class P3Commander {
+            constructor() {
+                this.group = new THREE.Group();
+                this.bunny = createBunnyBody(colors.bucket); // Red jacket
+                this.bunny.position.set(-20, 1.5, 10);
+                this.group.add(this.bunny);
+                
+                this.sword = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 8), getMaterial(colors.white));
+                this.sword.position.set(-20, 6, 12);
+                this.sword.rotation.x = Math.PI/2; // Pointing forward
+                this.group.add(this.sword);
+                scene.add(this.group);
+                this.angryTimer = 0;
+            }
+            miss() {
+                this.angryTimer = 1.0;
+                // Raise sword
+                this.sword.rotation.x = 0; 
+                this.sword.position.y = 10;
+            }
+            update(dt) {
+                if (this.angryTimer > 0) {
+                    this.angryTimer -= dt;
+                    if (this.angryTimer <= 0) {
+                        // Lower sword
+                        this.sword.rotation.x = Math.PI/2;
+                        this.sword.position.y = 6;
+                    }
+                }
+            }
+        }
+
+        class P4RollingEgg {
+            constructor(trackAngle) {
+                this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), getMaterial(colors.white));
+                this.mesh.scale.set(1, 1.3, 1);
+                this.angle = trackAngle;
+                this.dist = 5; // Starts at center stump
+                this.mesh.position.set(Math.cos(this.angle)*this.dist, 10 - (this.dist*0.3), Math.sin(this.angle)*this.dist);
+                scene.add(this.mesh);
+                this.markedForDeletion = false;
+            }
+            update(dt) {
+                this.dist += 15 * dt; // Rolling speed
+                this.mesh.position.set(Math.cos(this.angle)*this.dist, 10 - (this.dist*0.25), Math.sin(this.angle)*this.dist);
+                this.mesh.rotation.x -= dt*5;
+                if (this.dist > 35) this.markedForDeletion = true; // Missed
+            }
+        }
+
+        class ChocolateSculpture {
+            constructor(x, z, outfitColor) {
+                this.group = new THREE.Group();
+                this.group.position.set(x, 0, z);
+                
+                this.block = new THREE.Mesh(new THREE.BoxGeometry(8, 16, 4), getMaterial(colors.chocolate));
+                this.block.position.y = 8; this.group.add(this.block);
+                
+                this.bunny = createBunnyBody(outfitColor);
+                this.bunny.position.set(6, 1.5, 0); this.bunny.rotation.y = -Math.PI / 2; this.group.add(this.bunny);
+                
+                this.mallet = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 3, 16), getMaterial(colors.barrelRim));
+                this.mallet.position.set(4, 8, 2); this.group.add(this.mallet);
+                scene.add(this.group); this.targets = [];
+            }
+            spawnTarget(count) {
+                this.targets.forEach(t => { scene.remove(t); disposeGroup(t); });
+                this.targets = [];
+                for(let i=0; i<count; i++) {
+                    const target = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({color: 0xff0000}));
+                    target.position.set(this.group.position.x + (Math.random()-0.5)*6, 8 + (Math.random()-0.5)*12, this.group.position.z + 2);
+                    scene.add(target); this.targets.push(target); p5ActiveTargets.push(target);
+                }
+            }
+            update(dt) {
+                if (this.targets.length > 0) {
+                    const hitCycle = Date.now() * 0.01;
+                    const u = this.bunny.userData;
+                    u.armL.rotation.x = -Math.PI/2 + Math.sin(hitCycle)*0.5;
+                    this.mallet.rotation.x = Math.sin(hitCycle)*0.5;
+                    this.mallet.position.y = 8 + Math.sin(hitCycle)*1;
+                }
+            }
+        }
+
+        // --- Core Init ---
+        function initThreeJS() {
+            const container = document.getElementById('game-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(colors.sky);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8); dirLight.position.set(50, 100, 50); scene.add(dirLight);
+
+            clock = new THREE.Clock();
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function clearSceneFull() {
+            while(scene.children.length > 0){ let obj = scene.children[0]; scene.remove(obj); disposeGroup(obj); }
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8); dirLight.position.set(50, 100, 50); scene.add(dirLight);
+        }
+
+        // --- Phase Initializers ---
+        function initPhase1() {
+            currentPhase = 1; updateHUD(1, p1Score, P1_TARGET, "Choco");
+            clearSceneFull(); scene.fog = new THREE.Fog(colors.sky, 50, 200);
+            camera.position.set(0, 25, 40); camera.lookAt(0, 5, 0);
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 500), getMaterial(colors.grass));
+            ground.rotation.x = -Math.PI / 2; ground.position.z = -100; scene.add(ground);
+            const path = new THREE.Mesh(new THREE.PlaneGeometry(40, 500, 1, 10), getMaterial(colors.path));
+            path.rotation.x = -Math.PI / 2; path.position.y = 0.1; path.position.z = -100; scene.add(path);
+
+            p1Scenery = [];
+            for (let i = 0; i < 20; i++) {
+                const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()*4+2), getMaterial(Math.random()>0.5?colors.white:colors.grass)); 
+                mesh.position.set((Math.random()>0.5?1:-1)*(20+10+Math.random()*40), mesh.material.color.getHex()===colors.white?20+Math.random()*20:0, Math.random()*-150);
+                scene.add(mesh); p1Scenery.push(mesh);
+            }
+
+            playerObj = new P1Player(); p1Enemies = []; p1Collectibles = []; p1Score = 0; p1Speed = 60;
+            gameState = 'P1_PLAYING'; clock.getDelta();
+        }
+
+        function initPhase2() {
+            currentPhase = 2; updateHUD(2, p2EggsCollected, P2_TARGET, "Eggs");
+            document.body.classList.add('hide-cursor');
+            clearSceneFull(); scene.fog = null;
+            camera.position.set(0, 65, 55); camera.lookAt(0, 15, 0);
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), getMaterial(colors.path));
+            ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+            const cauldronGroup = new THREE.Group();
+            const potOuter = new THREE.Mesh(new THREE.CylinderGeometry(20, 16, 20, 64), getMaterial(colors.cauldron)); potOuter.position.y = 10; cauldronGroup.add(potOuter);
+            const potRim = new THREE.Mesh(new THREE.TorusGeometry(20, 1.5, 16, 64), getMaterial(colors.cauldron)); potRim.position.y = 20; potRim.rotation.x = Math.PI/2; cauldronGroup.add(potRim);
+            p2CauldronSurface = new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 18, 64), getMaterial(colors.chocolate)); p2CauldronSurface.position.y = 10.5; cauldronGroup.add(p2CauldronSurface);
+            scene.add(cauldronGroup);
+
+            // Bunny orbiting
+            p2Bunny = new THREE.Group();
+            const b = createBunnyBody(colors.overalls); b.position.y = 1.5; p2Bunny.add(b);
+            p2Bunny.tray = new THREE.Mesh(new THREE.CylinderGeometry(4.0, 4.0, 0.4, 32), getMaterial(colors.barrelRim));
+            p2Bunny.tray.position.set(0, 3.5, 3.5); p2Bunny.add(p2Bunny.tray);
+            p2Bunny.time = 0; scene.add(p2Bunny);
+
+            p2InvisiblePlane = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({visible: false}));
+            p2InvisiblePlane.rotation.x = -Math.PI/2; p2InvisiblePlane.position.y = 30; scene.add(p2InvisiblePlane);
+            
+            p2Spoon = new P2Spoon(); p2Spoon.group.position.y = 30;
+            p2Eggs = []; p2EggsCollected = 0;
+            gameState = 'P2_PLAYING'; clock.getDelta();
+        }
+
+        function initPhase3() {
+            currentPhase = 3; updateHUD(3, p3Hits, P3_TARGET, "Hits");
+            document.getElementById('hudExtra').classList.remove('hidden');
+            document.getElementById('hudExtra').innerText = `Lives: ${p3Lives}`;
+            document.body.classList.add('hide-cursor'); document.getElementById('crosshair').style.display = 'block';
+            
+            clearSceneFull(); scene.fog = null;
+            camera.position.set(0, 15, 30); camera.lookAt(0, 10, 0);
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), getMaterial(colors.grass));
+            ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+            p3Target = new P3Target(); p3Target.setRandomTarget();
+            p3Commander = new P3Commander();
+            p3Projectiles = []; p3Hits = 0; p3Lives = 3;
+            gameState = 'P3_PLAYING'; clock.getDelta();
+        }
+
+        function initPhase4() {
+            currentPhase = 4; updateHUD(4, p4Combo, P4_TARGET, "Combo");
+            document.body.classList.remove('hide-cursor'); document.getElementById('crosshair').style.display = 'none';
+            
+            clearSceneFull(); scene.fog = null;
+            camera.position.set(0, 60, 40); camera.lookAt(0, 5, 0);
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), getMaterial(colors.grass));
+            ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+            const stump = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, 15, 16), getMaterial(colors.barrelRim));
+            stump.position.y = 7.5; scene.add(stump);
+            const leadChicken = new THREE.Mesh(new THREE.SphereGeometry(3, 16,16), getMaterial(colors.fire));
+            leadChicken.position.y = 17; scene.add(leadChicken);
+
+            // 6 Tracks
+            for(let i=0; i<6; i++) {
+                const angle = (i/6) * Math.PI*2;
+                const track = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 30), getMaterial(colors.barrel));
+                track.position.set(Math.cos(angle)*15, 5, Math.sin(angle)*15);
+                track.rotation.y = -angle; track.rotation.x = Math.PI/12;
+                scene.add(track);
+                const chick = new THREE.Mesh(new THREE.SphereGeometry(2, 16,16), getMaterial(colors.bucket));
+                chick.position.set(Math.cos(angle)*8, 12, Math.sin(angle)*8);
+                scene.add(chick);
+            }
+
+            p4HitRing = new THREE.Mesh(new THREE.RingGeometry(25, 28, 64), new THREE.MeshBasicMaterial({color: 0xffff00, side: THREE.DoubleSide, transparent:true, opacity:0.5}));
+            p4HitRing.rotation.x = -Math.PI/2; p4HitRing.position.y = 1; scene.add(p4HitRing);
+
+            p4Eggs = []; p4Combo = 0; p4Timer = 0;
+            gameState = 'P4_PLAYING'; clock.getDelta();
+        }
+
+        function initPhase5() {
+            currentPhase = 5; updateHUD(5, p5Round, 9, "Round");
+            document.getElementById('hudExtra').classList.remove('hidden');
+            document.body.classList.add('hide-cursor'); document.getElementById('crosshair').style.display = 'block';
+
+            clearSceneFull(); scene.fog = null;
+            camera.position.set(0, 22, 65); camera.lookAt(0, 8, 0);
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), getMaterial(colors.grass));
+            ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+            const shroom = new THREE.Group();
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 10, 16), getMaterial(colors.mushroomStem));
+            stem.position.y = 5; shroom.add(stem);
+            const cap = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16, 0, Math.PI*2, 0, Math.PI/2), getMaterial(colors.mushroomCap));
+            cap.position.y = 10; shroom.add(cap);
+            const centerBunny = createBunnyBody(colors.white); centerBunny.position.y = 12; shroom.add(centerBunny);
+            scene.add(shroom);
+
+            p5Sculptures = [
+                new ChocolateSculpture(-15, -8, colors.overalls2), new ChocolateSculpture(9, -8, colors.overalls4),
+                new ChocolateSculpture(-19, 14, colors.overalls2), new ChocolateSculpture(13, 14, colors.overalls3)
+            ];
+
+            p5Round = 1; p5Timer = 10.0; p5ActiveTargets = [];
+            startP5Round();
+            gameState = 'P5_PLAYING'; clock.getDelta();
+        }
+
+        function startP5Round() {
+            p5Timer = 10.0;
+            p5ActiveTargets.forEach(t => { scene.remove(t); disposeGroup(t); });
+            p5ActiveTargets = [];
+            updateHUD(5, p5Round, 9, "Round");
+            
+            if (p5Round < 9) p5Sculptures.forEach(s => s.spawnTarget(1));
+            else {
+                let rem = 67;
+                while(rem > 0) { for(let i=0; i<4; i++) { if(rem > 0) { p5Sculptures[i].spawnTarget(1); rem--; } } }
+            }
+        }
+
+        // --- Core Loop & Input ---
+        function gameLoop() {
+            animationId = requestAnimationFrame(gameLoop);
+            const dt = clock.getDelta();
+            if (dt > 0.1) { actionJustPressed = false; return; }
+
+            if (gameState === 'P1_PLAYING') {
+                playerObj.update(dt);
+                p1EnemyTimer += dt*1000; p1ColTimer += dt*1000;
+                if(p1EnemyTimer > p1EnemyInterval) { p1Enemies.push(new P1Enemy((Math.random()*2-1)*17)); p1EnemyTimer=0; }
+                if(p1ColTimer > p1ColInterval) { p1Collectibles.push(new P1Collectible((Math.random()*2-1)*17)); p1ColTimer=0; }
+
+                for(let i=p1Enemies.length-1; i>=0; i--) {
+                    p1Enemies[i].update(dt);
+                    if(p1Enemies[i].markedForDeletion) { scene.remove(p1Enemies[i].group); disposeGroup(p1Enemies[i].group); p1Enemies.splice(i,1); }
+                    else { for(let box of p1Enemies[i].hitboxes) if(playerObj.box.intersectsBox(box)) setGameOver("You hit an obstacle!"); }
+                }
+                for(let i=p1Collectibles.length-1; i>=0; i--) {
+                    p1Collectibles[i].update(dt);
+                    if(p1Collectibles[i].markedForDeletion) { scene.remove(p1Collectibles[i].group); disposeGroup(p1Collectibles[i].group); p1Collectibles.splice(i,1); }
+                    else if(playerObj.box.intersectsBox(p1Collectibles[i].box)) {
+                        p1Score++; updateHUD(1, p1Score, P1_TARGET, "Choco");
+                        scene.remove(p1Collectibles[i].group); disposeGroup(p1Collectibles[i].group); p1Collectibles.splice(i,1);
+                        if(p1Score >= P1_TARGET) setTransition(2, "Phase 2: Egg Catching!", "Catch 5 eggs using SPACEBAR.");
+                    }
+                }
+                p1Scenery.forEach(m => { m.position.z += p1Speed*dt; if(m.position.z>20) { m.position.z=-150; m.position.x=(Math.random()>0.5?1:-1)*(30+Math.random()*40); }});
+            } 
+            else if (gameState === 'P2_PLAYING') {
+                raycaster.setFromCamera(mouse, camera);
+                const inter = raycaster.intersectObject(p2InvisiblePlane);
+                if(inter.length > 0) {
+                    p2Spoon.group.position.x += (inter[0].point.x - p2Spoon.group.position.x)*0.3;
+                    p2Spoon.group.position.z += (inter[0].point.z - p2Spoon.group.position.z)*0.3;
+                }
+
+                p2Bunny.time += dt; const angle = p2Bunny.time*0.8;
+                p2Bunny.position.x = Math.cos(angle)*32; p2Bunny.position.z = Math.sin(angle)*32;
+                p2Bunny.rotation.y = Math.atan2(-Math.sin(angle), Math.cos(angle));
+                p2Bunny.children[0].position.y = 1.5 + Math.abs(Math.sin(p2Bunny.time*15))*0.5;
+
+                p2EggTimer += dt; if(p2EggTimer > 1.8) { p2Eggs.push(new P2JumpingEgg()); p2EggTimer = 0; }
+
+                if (actionJustPressed) {
+                    if (!p2Spoon.isFull) {
+                        for(let i=p2Eggs.length-1; i>=0; i--) {
+                            const e = p2Eggs[i];
+                            if (e.state === 'JUMPING' && e.mesh.position.y > 15 && Math.hypot(e.mesh.position.x-p2Spoon.group.position.x, e.mesh.position.z-p2Spoon.group.position.z) < 7) {
+                                p2Spoon.catch(e.color); e.dispose(); p2Eggs.splice(i,1); break;
+                            }
+                        }
+                    } else {
+                        const sp = new THREE.Vector3(); p2Spoon.scoop.getWorldPosition(sp);
+                        const tp = new THREE.Vector3(); p2Bunny.tray.getWorldPosition(tp);
+                        if (Math.hypot(sp.x-tp.x, sp.z-tp.z) < 10) {
+                            p2Spoon.empty(); p2EggsCollected++; updateHUD(2, p2EggsCollected, P2_TARGET, "Eggs");
+                            if (p2EggsCollected >= P2_TARGET) setTransition(3, "Phase 3: Target Practice", "Click to shoot the matching colored spot!");
+                        }
+                    }
+                }
+
+                for(let i=p2Eggs.length-1; i>=0; i--) {
+                    p2Eggs[i].update(dt);
+                    if(p2Eggs[i].markedForDeletion) { p2Eggs[i].dispose(); p2Eggs.splice(i,1); }
+                }
+            }
+            else if (gameState === 'P3_PLAYING') {
+                p3Commander.update(dt);
+                // Target bobs
+                p3Target.group.position.y = Math.sin(Date.now()*0.002) * 2;
+                
+                if (actionJustPressed) {
+                    // Fire projectile
+                    raycaster.setFromCamera(mouse, camera);
+                    const dir = raycaster.ray.direction.clone();
+                    const proj = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), getMaterial(p3Target.currentColor));
+                    proj.position.set(0, 10, 20); // from camera
+                    proj.userData = { dir: dir };
+                    scene.add(proj); p3Projectiles.push(proj);
+                }
+
+                for(let i=p3Projectiles.length-1; i>=0; i--) {
+                    const p = p3Projectiles[i];
+                    p.position.addScaledVector(p.userData.dir, 100*dt);
+                    
+                    // Check hit on spot
+                    const spotPos = new THREE.Vector3(); p3Target.spot.getWorldPosition(spotPos);
+                    if (p.position.distanceTo(spotPos) < 4) {
+                        p3Hits++; updateHUD(3, p3Hits, P3_TARGET, "Hits");
+                        scene.remove(p); disposeGroup(p); p3Projectiles.splice(i,1);
+                        p3Target.setRandomTarget();
+                        if (p3Hits >= P3_TARGET) setTransition(4, "Phase 4: Rhythm Roost", "Hit Space when eggs cross the yellow ring!");
+                    } else if (p.position.z < -30) {
+                        // Missed
+                        scene.remove(p); disposeGroup(p); p3Projectiles.splice(i,1);
+                        p3Lives--; document.getElementById('hudExtra').innerText = `Lives: ${p3Lives}`;
+                        p3Commander.miss();
+                        if (p3Lives <= 0) setGameOver("The Commander is angry! You missed too many.");
+                    }
+                }
+            }
+            else if (gameState === 'P4_PLAYING') {
+                p4Timer += dt;
+                if (p4Timer > 1.2) {
+                    const angle = (Math.floor(Math.random()*6)/6) * Math.PI*2;
+                    p4Eggs.push(new P4RollingEgg(angle)); p4Timer = 0;
+                }
+                
+                let eggInZone = -1;
+                for(let i=0; i<p4Eggs.length; i++) {
+                    // Dist 26 is roughly the ring radius
+                    if (p4Eggs[i].dist > 23 && p4Eggs[i].dist < 29) { eggInZone = i; break; }
+                }
+
+                if (actionJustPressed) {
+                    if (eggInZone !== -1) {
+                        p4Combo++; updateHUD(4, p4Combo, P4_TARGET, "Combo");
+                        scene.remove(p4Eggs[eggInZone].mesh); disposeGroup(p4Eggs[eggInZone].mesh);
+                        p4Eggs.splice(eggInZone, 1);
+                        if (p4Combo >= P4_TARGET) setTransition(5, "Phase 5: Sculpting Studio", "Click all red dots! (10s per round)");
+                    } else {
+                        p4Combo = 0; updateHUD(4, p4Combo, P4_TARGET, "Combo"); // Miss reset
+                    }
+                }
+
+                for(let i=p4Eggs.length-1; i>=0; i--) {
+                    p4Eggs[i].update(dt);
+                    if(p4Eggs[i].markedForDeletion) {
+                        scene.remove(p4Eggs[i].mesh); disposeGroup(p4Eggs[i].mesh); p4Eggs.splice(i,1);
+                        p4Combo = 0; updateHUD(4, p4Combo, P4_TARGET, "Combo"); // Missed egg falls off
+                    }
+                }
+            }
+            else if (gameState === 'P5_PLAYING') {
+                p5Timer -= dt;
+                document.getElementById('hudExtra').innerText = `Time: ${Math.max(0, p5Timer).toFixed(1)}s`;
+                if (p5Timer <= 0) setGameOver("Time ran out!");
+                
+                p5Sculptures.forEach(s => s.update());
+
+                if (actionJustPressed) {
+                    let hit = false;
+                    for (let i=p5ActiveTargets.length-1; i>=0; i--) {
+                        const t = p5ActiveTargets[i];
+                        const pos = new THREE.Vector3(); t.getWorldPosition(pos); pos.project(camera);
+                        if (Math.hypot(pos.x - mouse.x, pos.y - mouse.y) < 0.15) { // NDC radius
+                            scene.remove(t); disposeGroup(t); p5ActiveTargets.splice(i,1); hit = true; break;
+                        }
+                    }
+                    if (hit && p5ActiveTargets.length === 0) {
+                        p5Round++;
+                        if (p5Round > 9) { gameState = 'WIN'; document.getElementById('winScreen').classList.remove('hidden'); setTimeout(()=>document.getElementById('winScreen').classList.remove('scale-0'), 10); document.body.classList.remove('hide-cursor'); document.getElementById('crosshair').style.display='none'; }
+                        else startP5Round();
+                    }
+                }
+            }
+
+            actionJustPressed = false;
+            renderer.render(scene, camera);
+        }
+
+        function updateHUD(phase, score, target, text) {
+            document.getElementById('topHud').classList.remove('hidden');
+            document.getElementById('hudPhaseText').innerText = `Phase ${phase}`;
+            document.getElementById('hudProgressText').innerText = `${text}: ${score}/${target}`;
+            if (phase !== 3 && phase !== 5) document.getElementById('hudExtra').classList.add('hidden');
+        }
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') { if(!keys.Space) actionJustPressed = true; keys.Space = true; e.preventDefault(); }
+            else if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+        });
+        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.code)) keys[e.code] = false; });
+        
+        window.addEventListener('mousemove', e => {
+            mouse.x = (e.clientX / window.innerWidth)*2 - 1; mouse.y = -(e.clientY / window.innerHeight)*2 + 1;
+            const ch = document.getElementById('crosshair');
+            if (ch.style.display === 'block') { ch.style.left = e.clientX+'px'; ch.style.top = e.clientY+'px'; }
+        });
+        window.addEventListener('mousedown', () => actionJustPressed = true);
+        window.addEventListener('touchstart', e => {
+            if(e.touches.length > 0) { mouse.x = (e.touches[0].clientX/window.innerWidth)*2-1; mouse.y = -(e.touches[0].clientY/window.innerHeight)*2+1; }
+            actionJustPressed = true;
+        }, {passive:false});
+
+        function hideAllScreens() {
+            ['startScreen', 'gameOverScreen', 'transitionScreen', 'winScreen'].forEach(id => {
+                document.getElementById(id).classList.add('scale-0');
+                setTimeout(() => document.getElementById(id).classList.add('hidden'), 300);
+            });
+            setTimeout(() => document.getElementById('overlayContainer').classList.add('pointer-events-none'), 300);
+        }
+
+        function setGameOver(reason) {
+            gameState = 'GAMEOVER'; document.body.classList.remove('hide-cursor'); document.getElementById('crosshair').style.display = 'none';
+            document.getElementById('gameOverReason').innerText = reason;
+            document.getElementById('overlayContainer').classList.remove('pointer-events-none');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            setTimeout(() => document.getElementById('gameOverScreen').classList.remove('scale-0'), 10);
+        }
+
+        function setTransition(nextPhase, title, desc) {
+            gameState = 'TRANSITION'; document.body.classList.remove('hide-cursor'); document.getElementById('crosshair').style.display = 'none';
+            document.getElementById('transTitle').innerText = title; document.getElementById('transDesc').innerText = desc;
+            document.getElementById('nextPhaseBtn').onclick = () => {
+                hideAllScreens();
+                if(nextPhase===2) initPhase2(); else if(nextPhase===3) initPhase3(); else if(nextPhase===4) initPhase4(); else if(nextPhase===5) initPhase5();
+            };
+            document.getElementById('overlayContainer').classList.remove('pointer-events-none');
+            document.getElementById('transitionScreen').classList.remove('hidden');
+            setTimeout(() => document.getElementById('transitionScreen').classList.remove('scale-0'), 10);
+        }
+
+        function restartCurrentPhase() {
+            hideAllScreens();
+            setTimeout(() => {
+                if(currentPhase===1) initPhase1(); else if(currentPhase===2) initPhase2(); else if(currentPhase===3) initPhase3(); else if(currentPhase===4) initPhase4(); else if(currentPhase===5) initPhase5();
+            }, 300);
+        }
+
+        document.getElementById('startBtn').addEventListener('click', () => { hideAllScreens(); setTimeout(initPhase1, 300); });
+        document.getElementById('restartBtn').addEventListener('click', restartCurrentPhase);
+        document.getElementById('winRestartBtn').addEventListener('click', () => { hideAllScreens(); setTimeout(initPhase1, 300); });
+
+        window.onload = () => { initThreeJS(); gameLoop(); };
+    </script>
+</body>
+</html>

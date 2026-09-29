@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PS1 Fruit Peeler Rush</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #ff99cc; 
+            font-family: 'Press Start 2P', monospace; 
+            user-select: none; 
+            touch-action: none;
+            color: white;
+            cursor: default; 
+        }
+        
+        #canvas-container { 
+            width: 100vw; 
+            height: 100vh; 
+            display: block; 
+            position: absolute;
+            top: 0; left: 0; z-index: 1;
+        }
+        
+        canvas {
+            image-rendering: pixelated; 
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .crt::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 100;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .ui-layer { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            padding: 1.5rem; 
+            box-sizing: border-box; 
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: none;
+        }
+        
+        .score-display { 
+            background: rgba(0, 0, 0, 0.7); 
+            padding: 1rem; 
+            border: 4px solid #fff; 
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            text-shadow: 2px 2px 0 #000;
+        }
+        
+        .timer-warning { color: #ef4444; animation: pulse 0.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        #celebration { 
+            position: absolute; top: 30%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-size: 2rem; color: #4ade80; 
+            text-shadow: 4px 4px 0 #000; 
+            opacity: 0; pointer-events: none; z-index: 20;
+            text-align: center; line-height: 1.5;
+        }
+        #celebration.show { opacity: 1; }
+
+        #game-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 50; text-align: center;
+        }
+        
+        .retro-btn {
+            background: #ff007f; border: 4px solid #fff;
+            padding: 1rem 2rem; color: white;
+            font-family: 'Press Start 2P', monospace;
+            cursor: pointer; transition: transform 0.1s;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: auto;
+        }
+        .retro-btn:active { transform: scale(0.95); }
+        
+        #peel-indicator {
+            position: absolute; width: 30px; height: 30px;
+            border: 2px solid white; border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 90; display: none;
+            transition: transform 0.1s, border-color 0.1s, background 0.1s;
+            mix-blend-mode: difference;
+        }
+        #peel-indicator.hover { 
+            transform: translate(-50%, -50%) scale(1.5); 
+            border-color: #4ade80; background: rgba(74, 222, 128, 0.2); 
+        }
+        #peel-indicator.dragging { 
+            transform: translate(-50%, -50%) scale(0.8); 
+            border-color: #fbbf24; background: rgba(251, 191, 36, 0.5); 
+        }
+
+        #minigame-cursor {
+            position: absolute; width: 128px; height: 128px;
+            pointer-events: none; z-index: 95; display: none;
+            transition: transform 0.05s ease-out;
+        }
+        
+        #minigame-cursor.swatter {
+            display: block;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="30" y="10" width="40" height="50" rx="10" fill="%23ff4444" stroke="%23000" stroke-width="4"/><line x1="30" y1="20" x2="70" y2="20" stroke="%23000" stroke-width="2"/><line x1="30" y1="30" x2="70" y2="30" stroke="%23000" stroke-width="2"/><line x1="30" y1="40" x2="70" y2="40" stroke="%23000" stroke-width="2"/><line x1="30" y1="50" x2="70" y2="50" stroke="%23000" stroke-width="2"/><line x1="40" y1="10" x2="40" y2="60" stroke="%23000" stroke-width="2"/><line x1="50" y1="10" x2="50" y2="60" stroke="%23000" stroke-width="2"/><line x1="60" y1="10" x2="60" y2="60" stroke="%23000" stroke-width="2"/><rect x="45" y="60" width="10" height="40" fill="%23a0522d" stroke="%23000" stroke-width="4"/></svg>') no-repeat center;
+            background-size: contain;
+            transform: translate(-30%, -20%) rotate(0deg);
+        }
+        #minigame-cursor.swatter.swat { transform: translate(-50%, -10%) rotate(-45deg) scale(0.8); }
+
+        #minigame-cursor.glove {
+            display: block;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M20 50 Q 20 20 50 20 Q 80 20 80 50 L 70 90 L 30 90 Z" fill="%23ffffff" stroke="%23000" stroke-width="4"/><line x1="40" y1="20" x2="40" y2="50" stroke="%23000" stroke-width="3"/><line x1="60" y1="20" x2="60" y2="50" stroke="%23000" stroke-width="3"/></svg>') no-repeat center;
+            background-size: contain;
+            transform: translate(-50%, -50%);
+        }
+        #minigame-cursor.glove.grab { transform: translate(-50%, -50%) scale(0.85); }
+        
+        #minigame-cursor.pincer {
+            display: block;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M30 10 L45 80 L55 80 L70 10" fill="none" stroke="%23aaaaaa" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M45 80 L48 95 L52 95 L55 80" fill="%23aaaaaa"/></svg>') no-repeat center;
+            background-size: contain;
+            transform: translate(-50%, -50%);
+        }
+        #minigame-cursor.pincer.pinch {
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M35 10 L48 80 L52 80 L65 10" fill="none" stroke="%23aaaaaa" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 80 L49 95 L51 95 L52 80" fill="%23aaaaaa"/></svg>') no-repeat center;
+            transform: translate(-50%, -50%) scale(0.9);
+        }
+
+        .hide-native-cursor { cursor: none !important; }
+    </style>
+</head>
+<body class="crt">
+    
+    <div id="canvas-container"></div>
+    
+    <div id="peel-indicator"></div>
+    <div id="minigame-cursor"></div>
+    
+    <div id="game-overlay">
+        <h1 class="text-4xl mb-6 text-[#ff007f]" style="text-shadow: 4px 4px 0 #fff;">PS1 PEELER</h1>
+        
+        <div id="start-section" class="flex flex-col items-center max-w-2xl">
+            <div class="bg-black/80 border-4 border-white p-6 mb-8 text-left text-sm leading-relaxed">
+                <p class="text-[#4ade80] mb-4">CONTROLS:</p>
+                <p>- <b>DRAG:</b> Rotate Fruit</p>
+                <p>- <b>CLICK TOP & DRAG DOWN:</b> Peel</p>
+                <p class="mt-4 text-[#fbbf24]">MINIGAMES (Peel Fast!):</p>
+                <p>- <b>FLIES & CATCH & SEEDS:</b> Hover & Press SPACEBAR</p>
+            </div>
+            
+            <button id="start-btn" class="retro-btn text-xl mb-8">START GAME</button>
+            
+            <label class="cursor-pointer bg-blue-600 border-2 border-white px-4 py-2 text-xs hover:bg-blue-500 pointer-events-auto">
+                LOAD OST (MP3)
+                <input type="file" id="audio-upload" accept="audio/*" class="hidden">
+            </label>
+            <span id="audio-name" class="text-[10px] text-blue-300 mt-2 hidden"></span>
+        </div>
+
+        <div id="leaderboard-section" class="hidden flex-col items-center mt-4 w-full max-w-md">
+            <div id="score-submit-area" class="mb-6 flex gap-4">
+                <input type="text" id="initials-input" maxlength="3" placeholder="AAA" class="bg-black border-4 border-white text-white text-center w-24 p-2 uppercase focus:outline-none pointer-events-auto">
+                <button id="submit-score-btn" class="retro-btn px-4 py-2 text-sm pointer-events-auto">SUBMIT</button>
+            </div>
+            <div class="w-full bg-black/80 border-4 border-white p-6">
+                <h3 class="text-xl mb-4 text-[#ff007f]">TOP SCORES</h3>
+                <ul id="leaderboard-list" class="w-full text-sm space-y-4 mb-6"></ul>
+                <button id="restart-btn" class="retro-btn w-full text-sm pointer-events-auto">PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ui-layer">
+        <div id="action-hint" class="bg-black/70 border-2 border-white p-2 text-xs hidden text-[#fbbf24] animate-pulse">
+            SPACEBAR: ACTION!
+        </div>
+        <div class="score-display">
+            <div>TIME: <span id="time-display">30</span></div>
+            <div>SCORE: <span id="score">0</span></div>
+        </div>
+    </div>
+    <div id="celebration"></div>
+    <audio id="bg-music" loop></audio>
+
+    <script>
+        (() => {
+            let scene, camera, renderer, physicsWorld;
+            let activeFruits; 
+            let peels = [];
+            let raycaster, mouse;
+            
+            let isDragging = false, isPeeling = false, currentActivePeel = null;
+            let previousMousePosition = { x: 0, y: 0 };
+            let isTransitioning = false;
+            
+            let gameActive = false, timeLeft = 30, peeledCount = 0;
+            let lastFrameTime = 0, peelStartTime = 0;
+            
+            let leaderboard = [];
+            try {
+                const savedData = localStorage.getItem('ps1FruitLeaderboardV4');
+                if (savedData && savedData.trim() !== '') leaderboard = JSON.parse(savedData);
+            } catch (error) {
+                console.warn("Could not parse leaderboard.");
+                leaderboard = [];
+            }
+
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            function playSound(type) {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    
+                    if (type === 'peel') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+                        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+                    } else if (type === 'swat') {
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+                        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+                    } else if (type === 'pluck') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+                    }
+                    
+                    osc.connect(gain); 
+                    gain.connect(audioCtx.destination);
+                } catch (e) { console.warn("Audio skipped", e); }
+            }
+
+            let lastMinigamePlayed = 2; // Will increment to 0 (Flies) on first trigger
+            
+            // Flies Minigame State
+            let isFlyMinigame = false;
+            let flies = [], flyTimer = 0, flySpawnTimer = 0;
+            
+            // Catch Minigame State
+            let isCatchMinigame = false;
+            let catchFruits = [], catchTarget = 5, caughtCount = 0;
+            let catchSpawnTimer = 0, catchSpawnCount = 0, totalCatchSpawns = 0;
+
+            // Seed Minigame State
+            let isSeedMinigame = false;
+            let watermelonBase = null, seedArray = [], seedsTarget = 0, seedsExtracted = 0;
+            let seedTimer = 0;
+
+            const FRUIT_TYPES = ['banana', 'apple', 'pear', 'dragonfruit', 'grape', 'pineapple', 'kiwi', 'papaya', 'melon', 'watermelon'];
+            const FRUIT_CONFIGS = {
+                'banana': { core: 0xFFFDD0, peel: 0xFFD700, h: 7 },
+                'apple': { core: 0xFEF9E7, peel: 0xDF2020, h: 4 },
+                'pear': { core: 0xFDFFF0, peel: 0xA4C639, h: 5 },
+                'dragonfruit': { core: 0xFFFFFF, peel: 0xFF1493, h: 5 },
+                'grape': { core: 0x93C572, peel: 0x6F2DA8, h: 2.5 },
+                'pineapple': { core: 0xFFE5B4, peel: 0x8B6508, h: 6 },
+                'kiwi': { core: 0x8EE53F, peel: 0x8B5A2B, h: 3.5 },
+                'papaya': { core: 0xFF8C00, peel: 0x32CD32, h: 6 },
+                'melon': { core: 0xFFB020, peel: 0xC1C999, h: 4.5 },
+                'watermelon': { core: 0xFF2040, peel: 0x206030, h: 5.5 }
+            };
+
+            const peelIndicator = document.getElementById('peel-indicator');
+            const minigameCursor = document.getElementById('minigame-cursor');
+            const scoreDisplay = document.getElementById('score');
+            const celebrationText = document.getElementById('celebration');
+            const timeDisplay = document.getElementById('time-display');
+            const gameOverlay = document.getElementById('game-overlay');
+            const actionHint = document.getElementById('action-hint');
+
+            function getRetroTexture(colorHex, noiseLevel) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64; canvas.height = 64; 
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+                ctx.fillRect(0, 0, 64, 64);
+                for (let i = 0; i < 800; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${noiseLevel})` : `rgba(0,0,0,${noiseLevel})`;
+                    ctx.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+                }
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.magFilter = THREE.NearestFilter; 
+                tex.minFilter = THREE.NearestFilter;
+                return tex;
+            }
+
+            function clearGroupSafe(group) {
+                if (!group) return;
+                for (let i = group.children.length - 1; i >= 0; i--) {
+                    const child = group.children[i];
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                    group.remove(child);
+                }
+            }
+
+            function init() {
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0xff99cc);
+                scene.fog = new THREE.Fog(0xff99cc, 15, 45);
+
+                renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+                renderer.setSize(window.innerWidth / 3, window.innerHeight / 3, false); 
+                document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+                camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+                camera.position.set(0, 0, 18);
+
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                scene.add(ambientLight);
+                
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(5, 10, 7);
+                scene.add(dirLight);
+
+                raycaster = new THREE.Raycaster();
+                mouse = new THREE.Vector2();
+                activeFruits = new THREE.Group();
+                scene.add(activeFruits);
+
+                physicsWorld = new CANNON.World();
+                physicsWorld.gravity.set(0, -30, 0);
+                physicsWorld.broadphase = new CANNON.NaiveBroadphase();
+                physicsWorld.solver.iterations = 5;
+
+                setupEventListeners();
+                window.addEventListener('resize', onWindowResize, false);
+                
+                spawnLevel(); 
+                requestAnimationFrame(animate);
+            }
+
+            function getFruitRadius(t, type, stretch) {
+                let r = 1;
+                if(type==='banana') r = Math.sin(t*Math.PI)*1.0+0.15;
+                else if(type==='apple') r = Math.sin(t*Math.PI)*2.8+(0.1-Math.pow(Math.abs(t-0.5)*2,2)*0.6);
+                else if(type==='pear') r = Math.sin(t*Math.PI)*(3.0-t*2.2)+0.2;
+                else if(type==='dragonfruit') r = Math.sin(t*Math.PI)*2.3+0.3;
+                else if(type==='grape') r = Math.sin(t*Math.PI)*1.5+0.1;
+                else if(type==='pineapple') r = (Math.sin(t*Math.PI)*0.3+0.7)*2.4;
+                else if(type==='kiwi') r = Math.sin(t*Math.PI)*1.8+0.1;
+                else if(type==='papaya') r = Math.sin(t*Math.PI)*(2.4-Math.abs(t-0.3)*1.0)+0.2;
+                else if(type==='melon') r = Math.sin(t*Math.PI)*2.6+0.4;
+                else if(type==='watermelon') r = Math.sin(t*Math.PI)*2.2+0.2;
+                return Math.max(r * stretch.radius, 0.1);
+            }
+
+            function getFruitCurve(t, type, stretch) {
+                let oz = 0;
+                if (type === 'banana') oz = Math.sin(t * Math.PI) * 3.0 * stretch.curve; 
+                if (type === 'papaya') oz = Math.sin(t * Math.PI) * 0.7 * stretch.curve;
+                return { ox: 0, oz: oz };
+            }
+
+            function deformGeometry(geometry, type, baseHeight, isPeel, peelThickness, stretch) {
+                const positions = geometry.attributes.position.array;
+                const origPositions = new Float32Array(positions.length);
+                const height = baseHeight * stretch.height;
+                
+                for (let i = 0; i < positions.length; i += 3) {
+                    let x = positions[i];
+                    let y = positions[i+1];
+                    let z = positions[i+2];
+                    
+                    const t = (y - (-height/2)) / height;
+                    let r = getFruitRadius(t, type, stretch);
+                    if (isPeel) r += peelThickness;
+                    
+                    const curve = getFruitCurve(t, type, stretch);
+                    const len = Math.sqrt(x*x + z*z) || 1;
+                    
+                    positions[i] = (x/len) * r + curve.ox;
+                    positions[i+2] = (z/len) * r + curve.oz;
+                    
+                    origPositions[i] = positions[i]; 
+                    origPositions[i+1] = positions[i+1]; 
+                    origPositions[i+2] = positions[i+2];
+                }
+                geometry.setAttribute('origPosition', new THREE.BufferAttribute(origPositions, 3));
+                geometry.attributes.position.needsUpdate = true;
+                geometry.computeVertexNormals();
+                geometry.computeBoundingSphere();
+            }
+
+            function createFruitInstance(type, positionOffset) {
+                const config = FRUIT_CONFIGS[type];
+                const stretch = { h: 0.8 + Math.random()*0.4, r: 0.7 + Math.random()*0.6, curve: 0.5 + Math.random() };
+                const height = config.h * stretch.h;
+                const fruitGroup = new THREE.Group();
+                
+                const fruitGeometry = new THREE.CylinderGeometry(1, 1, height, 8, 8);
+                deformGeometry(fruitGeometry, type, config.h, false, 0, {height: stretch.h, radius: stretch.r, curve: stretch.curve});
+
+                const coreMat = new THREE.MeshLambertMaterial({ map: getRetroTexture(config.core, 0.1) });
+                fruitGroup.add(new THREE.Mesh(fruitGeometry, coreMat));
+
+                const numPeels = Math.min(3 + Math.floor(peeledCount / 2), 10);
+                const peelMat = new THREE.MeshLambertMaterial({ map: getRetroTexture(config.peel, 0.2), side: THREE.DoubleSide });
+
+                for (let i = 0; i < numPeels; i++) {
+                    const startAngle = i * ((Math.PI * 2) / numPeels);
+                    const peelGeom = new THREE.CylinderGeometry(1, 1, height, 3, 8, false, startAngle, ((Math.PI * 2) / numPeels) + 0.1);
+                    deformGeometry(peelGeom, type, config.h, true, 0.3, {height: stretch.h, radius: stretch.r, curve: stretch.curve});
+
+                    const mesh = new THREE.Mesh(peelGeom, peelMat);
+                    mesh.userData = { 
+                        isPeel: true, 
+                        peelProgress: 0, 
+                        baseAngle: startAngle + (Math.PI/numPeels), 
+                        isFullyPeeled: false, 
+                        height: height 
+                    };
+                    peels.push(mesh);
+                    fruitGroup.add(mesh);
+                }
+
+                fruitGroup.rotation.y = Math.random() * Math.PI * 2;
+                fruitGroup.position.copy(positionOffset);
+                return fruitGroup;
+            }
+
+            function spawnLevel() {
+                clearGroupSafe(activeFruits);
+                peels = [];
+                const type = FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
+                activeFruits.add(createFruitInstance(type, new THREE.Vector3(0, 0, 0)));
+                peelStartTime = performance.now();
+                peelIndicator.style.display = 'block'; 
+            }
+
+            function updatePeelGeometry(mesh) {
+                const geom = mesh.geometry;
+                const pos = geom.attributes.position.array;
+                const orig = geom.attributes.origPosition.array;
+                
+                const p = mesh.userData.peelProgress;
+                const baseA = mesh.userData.baseAngle;
+                const H = mesh.userData.height;
+                
+                const dX = Math.cos(baseA);
+                const dZ = Math.sin(baseA);
+                const threshY = (H/2) - (p * H);
+                
+                for (let i = 0; i < pos.length; i += 3) {
+                    const oy = orig[i+1];
+                    if (oy > threshY && p > 0.01) {
+                        const t = (oy - threshY) / H;
+                        const flare = Math.pow(t, 0.8) * 4.0;
+                        const droop = Math.pow(t, 1.2) * H * 1.8;
+                        pos[i] = orig[i] + dX * flare;
+                        pos[i+1] = oy - droop;
+                        pos[i+2] = orig[i+2] + dZ * flare;
+                    } else {
+                        pos[i] = orig[i]; pos[i+1] = oy; pos[i+2] = orig[i+2];
+                    }
+                }
+                geom.attributes.position.needsUpdate = true;
+                geom.computeVertexNormals();
+                geom.computeBoundingSphere();
+            }
+
+            function checkWinCondition() {
+                const allPeeled = peels.every(p => p.userData.isFullyPeeled);
+                if (allPeeled && !isTransitioning) {
+                    isTransitioning = true;
+                    peeledCount++;
+                    scoreDisplay.innerText = peeledCount;
+                    
+                    timeLeft += 10;
+                    timeDisplay.innerText = Math.ceil(timeLeft);
+                    
+                    const timeTaken = (performance.now() - peelStartTime) / 1000;
+                    peelIndicator.style.display = 'none'; 
+                    
+                    if (timeTaken < 20.0 && Math.random() < 0.75) {
+                        lastMinigamePlayed = (lastMinigamePlayed + 1) % 3;
+                        if (lastMinigamePlayed === 0) startFlyMinigame();
+                        else if (lastMinigamePlayed === 1) startCatchMinigame();
+                        else startSeedMinigame();
+                    } else {
+                        celebrationText.innerText = "NICE PEEL!\n+10 SEC";
+                        celebrationText.classList.add('show');
+                        setTimeout(() => {
+                            celebrationText.classList.remove('show');
+                            dropAndSpawnNext();
+                        }, 800);
+                    }
+                }
+            }
+
+            function dropAndSpawnNext() {
+                new TWEEN.Tween(activeFruits.position)
+                    .to({ y: -25 }, 500)
+                    .onComplete(() => {
+                        spawnLevel();
+                        activeFruits.position.y = 25;
+                        new TWEEN.Tween(activeFruits.position)
+                            .to({ y: 0 }, 500)
+                            .onComplete(() => { isTransitioning = false; })
+                            .start();
+                    })
+                    .start();
+            }
+
+            function startFlyMinigame() {
+                isFlyMinigame = true; 
+                flyTimer = 10; 
+                flySpawnTimer = 0;
+                
+                document.body.classList.add('hide-native-cursor');
+                minigameCursor.className = 'swatter'; 
+                
+                actionHint.style.display = 'block';
+                actionHint.innerText = "SPACEBAR: SWAT FLIES!";
+                
+                celebrationText.innerText = "DEFEND!\nSPACEBAR"; 
+                celebrationText.classList.add('show');
+                setTimeout(() => celebrationText.classList.remove('show'), 1500);
+            }
+            
+            function spawnFly() {
+                const m = new THREE.Group();
+                const body = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.5, 0.5, 0.5), 
+                    new THREE.MeshLambertMaterial({color: 0x111111})
+                );
+                const wingL = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.6, 0.1, 0.3),
+                    new THREE.MeshLambertMaterial({color: 0xeeeeee})
+                );
+                wingL.position.set(-0.4, 0.3, 0);
+                const wingR = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.6, 0.1, 0.3),
+                    new THREE.MeshLambertMaterial({color: 0xeeeeee})
+                );
+                wingR.position.set(0.4, 0.3, 0);
+                
+                m.add(body); m.add(wingL); m.add(wingR);
+                
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 15 + Math.random() * 10;
+                m.position.set(Math.cos(angle)*dist, Math.sin(angle)*dist, (Math.random()-0.5)*10);
+                m.userData = { jiggleOffset: Math.random() * Math.PI * 2 };
+                
+                scene.add(m); 
+                flies.push(m);
+            }
+            
+            function endFlyMinigame(won) {
+                isFlyMinigame = false; 
+                document.body.classList.remove('hide-native-cursor');
+                minigameCursor.className = ''; 
+                actionHint.style.display = 'none';
+                
+                for (let i = flies.length - 1; i >= 0; i--) {
+                    clearGroupSafe(flies[i]);
+                    scene.remove(flies[i]);
+                }
+                flies = [];
+                
+                if(won) {
+                    celebrationText.innerText = "SURVIVED!\n+10 SEC";
+                    timeLeft += 10;
+                } else {
+                    celebrationText.innerText = "OVERRUN!";
+                }
+                
+                celebrationText.classList.add('show');
+                setTimeout(() => { 
+                    celebrationText.classList.remove('show'); 
+                    dropAndSpawnNext(); 
+                }, 1500);
+            }
+
+            function startCatchMinigame() {
+                isCatchMinigame = true; 
+                catchTarget = 5 + Math.floor(peeledCount/3);
+                caughtCount = 0; catchSpawnCount = 0; catchSpawnTimer = 0;
+                totalCatchSpawns = catchTarget + 5;
+                
+                activeFruits.visible = false;
+                document.body.classList.add('hide-native-cursor');
+                minigameCursor.className = 'glove';
+                
+                actionHint.style.display = 'block';
+                actionHint.innerText = "SPACEBAR: CATCH FRUIT!";
+                
+                celebrationText.innerText = `CATCH ${catchTarget}!\nSPACEBAR`; 
+                celebrationText.classList.add('show');
+                setTimeout(() => celebrationText.classList.remove('show'), 1500);
+            }
+
+            function spawnCatchFruit() {
+                const type = FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
+                const conf = FRUIT_CONFIGS[type];
+                const m = new THREE.Mesh(
+                    new THREE.CylinderGeometry(1, 1, conf.h, 6, 1), 
+                    new THREE.MeshLambertMaterial({map: getRetroTexture(conf.core, 0.2)})
+                );
+                scene.add(m);
+                const b = new CANNON.Body({ 
+                    mass: 1, 
+                    shape: new CANNON.Box(new CANNON.Vec3(1, conf.h/2, 1)), 
+                    position: new CANNON.Vec3((Math.random()-0.5)*20, -15, 0) 
+                });
+                b.velocity.set(0, 30 + Math.random()*15, 0);
+                b.angularVelocity.set(Math.random()*5, Math.random()*5, 0);
+                physicsWorld.addBody(b);
+                catchFruits.push({mesh: m, body: b, caught: false});
+            }
+            
+            function endCatchMinigame(won) {
+                isCatchMinigame = false; 
+                document.body.classList.remove('hide-native-cursor');
+                minigameCursor.className = ''; 
+                actionHint.style.display = 'none';
+                
+                catchFruits.forEach(f => { 
+                    f.mesh.geometry.dispose(); f.mesh.material.dispose();
+                    scene.remove(f.mesh); physicsWorld.removeBody(f.body); 
+                }); 
+                catchFruits = [];
+                
+                if(won) {
+                    celebrationText.innerText = "CAUGHT!\n+10 SEC"; 
+                    timeLeft += 10;
+                } else {
+                    celebrationText.innerText = "DROPPED!";
+                }
+                
+                celebrationText.classList.add('show');
+                setTimeout(() => { 
+                    celebrationText.classList.remove('show'); 
+                    activeFruits.visible = true; 
+                    dropAndSpawnNext(); 
+                }, 1500);
+            }
+
+            function startSeedMinigame() {
+                isSeedMinigame = true;
+                seedTimer = 10;
+                seedsExtracted = 0;
+                seedsTarget = 15 + Math.floor(peeledCount * 1.5); // Drastically increased seed count
+                
+                activeFruits.visible = false;
+                document.body.classList.add('hide-native-cursor');
+                minigameCursor.className = 'pincer';
+                
+                actionHint.style.display = 'block';
+                actionHint.innerText = "SPACEBAR: PLUCK SEEDS!";
+                
+                celebrationText.innerText = `PLUCK ${seedsTarget}!\nSPACEBAR`;
+                celebrationText.classList.add('show');
+                setTimeout(() => celebrationText.classList.remove('show'), 1500);
+
+                // Create watermelon half (Greatly expanded surface area)
+                const baseGeom = new THREE.CylinderGeometry(10, 10, 2, 32);
+                const matSide = new THREE.MeshLambertMaterial({ map: getRetroTexture(0x206030, 0.1) });
+                const matTop = new THREE.MeshLambertMaterial({ map: getRetroTexture(0xff2040, 0.2) });
+                
+                watermelonBase = new THREE.Mesh(baseGeom, [matSide, matTop, matSide]);
+                watermelonBase.rotation.x = Math.PI / 2; // Face camera
+                scene.add(watermelonBase);
+
+                // Create seeds on top
+                const seedGeom = new THREE.SphereGeometry(0.3, 8, 8);
+                const seedMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+                for(let i=0; i<seedsTarget; i++) {
+                    const seed = new THREE.Mesh(seedGeom, seedMat);
+                    seed.scale.set(0.6, 1.2, 0.3); // teardrop shape
+                    
+                    const theta = Math.random() * Math.PI * 2;
+                    // Spread seeds over the newly enlarged surface area (radius up to 8.5)
+                    const r = Math.sqrt(Math.random()) * 8.5; 
+                    
+                    seed.position.set(r * Math.cos(theta), r * Math.sin(theta), 1.0);
+                    seed.rotation.z = Math.atan2(seed.position.y, seed.position.x); // point outwards
+                    
+                    watermelonBase.add(seed);
+                    seedArray.push(seed);
+                }
+            }
+
+            function endSeedMinigame(won) {
+                isSeedMinigame = false;
+                document.body.classList.remove('hide-native-cursor');
+                minigameCursor.className = '';
+                actionHint.style.display = 'none';
+
+                if(watermelonBase) {
+                    clearGroupSafe(watermelonBase);
+                    scene.remove(watermelonBase);
+                    watermelonBase = null;
+                }
+                seedArray = [];
+
+                if(won) {
+                    celebrationText.innerText = "CLEARED!\n+10 SEC";
+                    timeLeft += 10;
+                } else {
+                    celebrationText.innerText = "FAILED!";
+                }
+
+                celebrationText.classList.add('show');
+                setTimeout(() => { 
+                    celebrationText.classList.remove('show'); 
+                    activeFruits.visible = true; 
+                    dropAndSpawnNext(); 
+                }, 1500);
+            }
+
+            function getNormalizedPointer(e) {
+                let cx = e.clientX, cy = e.clientY;
+                if(e.changedTouches && e.changedTouches.length > 0) { 
+                    cx = e.changedTouches[0].clientX; 
+                    cy = e.changedTouches[0].clientY; 
+                }
+                mouse.x = (cx / window.innerWidth) * 2 - 1; 
+                mouse.y = -(cy / window.innerHeight) * 2 + 1;
+                return { x: cx, y: cy };
+            }
+
+            function setupEventListeners() {
+                
+                window.addEventListener('pointermove', e => {
+                    const ptr = getNormalizedPointer(e);
+                    
+                    peelIndicator.style.left = ptr.x + 'px';
+                    peelIndicator.style.top = ptr.y + 'px';
+                    minigameCursor.style.left = ptr.x + 'px';
+                    minigameCursor.style.top = ptr.y + 'px';
+                    
+                    if(!gameActive || isTransitioning) return; 
+                    
+                    let dx = ptr.x - previousMousePosition.x;
+                    let dy = ptr.y - previousMousePosition.y;
+
+                    if (!isFlyMinigame && !isCatchMinigame && !isSeedMinigame && !isDragging && !isPeeling) {
+                        raycaster.setFromCamera(mouse, camera);
+                        const intersects = raycaster.intersectObjects(peels);
+                        if (intersects.length > 0 && intersects[0].uv && intersects[0].uv.y > 0.4 && !intersects[0].object.userData.isFullyPeeled) {
+                            peelIndicator.classList.add('hover');
+                        } else {
+                            peelIndicator.classList.remove('hover');
+                        }
+                    }
+
+                    if (isDragging && activeFruits) {
+                        activeFruits.rotation.y += dx * 0.01; 
+                        activeFruits.rotation.x += dy * 0.01;
+                    } else if (isPeeling && currentActivePeel && dy > 0) {
+                        peelIndicator.classList.add('dragging');
+                        let newProgress = currentActivePeel.userData.peelProgress + (dy * 0.005);
+                        currentActivePeel.userData.peelProgress = Math.min(Math.max(newProgress, 0), 1);
+                        updatePeelGeometry(currentActivePeel);
+                        
+                        if (currentActivePeel.userData.peelProgress >= 0.95 && !currentActivePeel.userData.isFullyPeeled) {
+                            currentActivePeel.userData.isFullyPeeled = true; 
+                            currentActivePeel.userData.peelProgress = 1.0;
+                            updatePeelGeometry(currentActivePeel); 
+                            checkWinCondition();
+                        }
+                    }
+                    previousMousePosition = ptr;
+                });
+
+                window.addEventListener('pointerdown', e => {
+                    if(!gameActive || isTransitioning) return;
+                    const ptr = getNormalizedPointer(e); 
+                    previousMousePosition = ptr;
+
+                    if(!isFlyMinigame && !isCatchMinigame && !isSeedMinigame) {
+                        raycaster.setFromCamera(mouse, camera);
+                        const intersects = raycaster.intersectObjects(peels);
+                        if (intersects.length > 0 && intersects[0].uv && intersects[0].uv.y > 0.4 && !intersects[0].object.userData.isFullyPeeled) {
+                            isPeeling = true; 
+                            currentActivePeel = intersects[0].object; 
+                            playSound('peel'); 
+                            return;
+                        }
+                        isDragging = true;
+                    }
+                });
+
+                const stopInteraction = () => { 
+                    isDragging = false; isPeeling = false; currentActivePeel = null; 
+                    peelIndicator.classList.remove('dragging');
+                };
+                window.addEventListener('pointerup', stopInteraction);
+                window.addEventListener('pointercancel', stopInteraction);
+                window.addEventListener('pointerleave', stopInteraction);
+                window.addEventListener('contextmenu', e => e.preventDefault());
+
+                window.addEventListener('keydown', e => {
+                    if(e.code === 'Space') {
+                        if(isFlyMinigame) {
+                            minigameCursor.classList.add('swat'); 
+                            playSound('swat');
+                            raycaster.setFromCamera(mouse, camera);
+                            
+                            let toRemove = [];
+                            flies.forEach((f, idx) => {
+                                if(raycaster.ray.distanceSqToPoint(f.position) < 20) {
+                                    toRemove.push(idx);
+                                }
+                            });
+                            
+                            for (let i = toRemove.length - 1; i >= 0; i--) {
+                                let hitIdx = toRemove[i];
+                                let hitFly = flies[hitIdx];
+                                clearGroupSafe(hitFly);
+                                scene.remove(hitFly);
+                                flies.splice(hitIdx, 1);
+                            }
+
+                            setTimeout(() => minigameCursor.classList.remove('swat'), 150);
+                        } else if (isCatchMinigame) {
+                            minigameCursor.classList.add('grab'); 
+                            playSound('swat');
+                            raycaster.setFromCamera(mouse, camera);
+                            
+                            let hitF = catchFruits.find(f => !f.caught && raycaster.ray.distanceSqToPoint(f.mesh.position) < 40);
+                            if(hitF) {
+                                hitF.caught = true; 
+                                hitF.mesh.geometry.dispose(); hitF.mesh.material.dispose();
+                                scene.remove(hitF.mesh); physicsWorld.removeBody(hitF.body);
+                                caughtCount++;
+                            }
+                            setTimeout(() => minigameCursor.classList.remove('grab'), 150);
+                        } else if (isSeedMinigame) {
+                            minigameCursor.classList.add('pinch');
+                            playSound('pluck');
+                            raycaster.setFromCamera(mouse, camera);
+
+                            let toRemove = [];
+                            seedArray.forEach((s, idx) => {
+                                // Provide generous hitbox for plucking
+                                const seedWorldPos = new THREE.Vector3();
+                                s.getWorldPosition(seedWorldPos);
+                                if(raycaster.ray.distanceSqToPoint(seedWorldPos) < 10) {
+                                    toRemove.push(idx);
+                                }
+                            });
+
+                            for(let i = toRemove.length - 1; i >= 0; i--) {
+                                let hitIdx = toRemove[i];
+                                let hitSeed = seedArray[hitIdx];
+                                hitSeed.geometry.dispose(); hitSeed.material.dispose();
+                                watermelonBase.remove(hitSeed);
+                                seedArray.splice(hitIdx, 1);
+                                seedsExtracted++;
+                            }
+
+                            setTimeout(() => minigameCursor.classList.remove('pinch'), 150);
+                            if(seedsExtracted >= seedsTarget) endSeedMinigame(true);
+                        }
+                    }
+                });
+            }
+
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                document.getElementById('leaderboard-section').style.display = 'none';
+                document.getElementById('start-section').style.display = 'flex';
+                startGame();
+            });
+
+            document.getElementById('submit-score-btn').addEventListener('click', () => {
+                let init = document.getElementById('initials-input').value.toUpperCase().trim();
+                if (!init) init = 'AAA';
+                
+                leaderboard.push({ initials: init.substring(0,3), score: peeledCount });
+                leaderboard.sort((a, b) => b.score - a.score); 
+                leaderboard = leaderboard.slice(0, 5);
+                try { localStorage.setItem('ps1FruitLeaderboardV4', JSON.stringify(leaderboard)); } catch(e){}
+                
+                document.getElementById('score-submit-area').style.display = 'none';
+                renderLeaderboard();
+            });
+
+            function renderLeaderboard() {
+                const list = document.getElementById('leaderboard-list'); 
+                list.innerHTML = '';
+                leaderboard.forEach((e, i) => {
+                    list.innerHTML += `<li class="flex justify-between"><span>#${i+1} ${e.initials}</span><span class="text-[#fbbf24]">${e.score}</span></li>`;
+                });
+            }
+
+            document.getElementById('audio-upload').addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (file) {
+                    document.getElementById('bg-music').src = URL.createObjectURL(file);
+                    document.getElementById('audio-name').innerText = file.name;
+                    document.getElementById('audio-name').style.display = 'block';
+                    if(gameActive) document.getElementById('bg-music').play().catch(console.error);
+                }
+            });
+
+            function startGame() {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                gameOverlay.style.display = 'none';
+                peeledCount = 0; scoreDisplay.innerText = peeledCount;
+                timeLeft = 30; timeDisplay.innerText = timeLeft; 
+                timeDisplay.classList.remove('timer-warning');
+                
+                spawnLevel(); 
+                gameActive = true; 
+                lastFrameTime = performance.now();
+                if(document.getElementById('bg-music').src) document.getElementById('bg-music').play().catch(console.error);
+            }
+
+            function endGame() {
+                gameActive = false; isDragging = false; isPeeling = false;
+                peelIndicator.style.display = 'none';
+                
+                document.getElementById('start-section').style.display = 'none';
+                document.getElementById('leaderboard-section').style.display = 'flex';
+                document.getElementById('score-submit-area').style.display = 'flex';
+                
+                renderLeaderboard(); 
+                gameOverlay.style.display = 'flex';
+                document.getElementById('bg-music').pause();
+            }
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth/3, window.innerHeight/3, false);
+            }
+
+            function animate(time) {
+                requestAnimationFrame(animate);
+                TWEEN.update(time);
+                
+                if (!lastFrameTime) lastFrameTime = time;
+                let deltaTime = Math.min(time - lastFrameTime, 50); 
+                lastFrameTime = time;
+
+                if (gameActive) {
+                    timeLeft -= deltaTime / 1000;
+                    
+                    if (timeLeft <= 5 && timeLeft > 0) timeDisplay.classList.add('timer-warning');
+                    else timeDisplay.classList.remove('timer-warning');
+                    
+                    if (timeLeft <= 0) { timeLeft = 0; endGame(); }
+                    timeDisplay.innerText = Math.ceil(timeLeft);
+
+                    if (isFlyMinigame) {
+                        flyTimer -= deltaTime / 1000; 
+                        flySpawnTimer -= deltaTime;
+                        
+                        if (flySpawnTimer <= 0) { 
+                            flySpawnTimer = Math.max(400 - (peeledCount * 15), 150);
+                            spawnFly(); 
+                        }
+                        
+                        for (let i = flies.length - 1; i >= 0; i--) {
+                            let fly = flies[i];
+                            const dir = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), fly.position).normalize();
+                            let flySpeed = 0.05 + (peeledCount * 0.005);
+                            fly.position.addScaledVector(dir, flySpeed);
+                            
+                            fly.userData.jiggleOffset += 0.2;
+                            if(fly.children && fly.children.length > 2) {
+                                fly.children[1].rotation.z = Math.sin(fly.userData.jiggleOffset) * 0.5;
+                                fly.children[2].rotation.z = -Math.sin(fly.userData.jiggleOffset) * 0.5;
+                            }
+                            fly.lookAt(0,0,0);
+                            
+                            if (fly.position.length() < 2.5) {
+                                endFlyMinigame(false);
+                                break; 
+                            }
+                        }
+                        
+                        if (flyTimer <= 0 && isFlyMinigame) endFlyMinigame(true);
+                    }
+
+                    if (isCatchMinigame) {
+                        physicsWorld.step(1/60, deltaTime/1000, 3);
+                        catchSpawnTimer -= deltaTime;
+                        
+                        if (catchSpawnTimer <= 0 && catchSpawnCount < totalCatchSpawns) {
+                            spawnCatchFruit();
+                            catchSpawnCount++;
+                            catchSpawnTimer = 400; 
+                        }
+
+                        let allSpawned = (catchSpawnCount === totalCatchSpawns);
+                        let allFallen = true;
+                        
+                        catchFruits.forEach(f => {
+                            if(!f.caught) {
+                                f.mesh.position.copy(f.body.position); 
+                                f.mesh.quaternion.copy(f.body.quaternion);
+                                if(f.body.position.y > -20) allFallen = false;
+                            }
+                        });
+                        
+                        if (caughtCount >= catchTarget) endCatchMinigame(true);
+                        else if (allSpawned && allFallen) endCatchMinigame(false);
+                    }
+
+                    if (isSeedMinigame) {
+                        seedTimer -= deltaTime / 1000;
+                        if(watermelonBase) {
+                            // Gentle floating animation for the watermelon half
+                            watermelonBase.position.y = Math.sin(time * 0.002) * 0.5;
+                            watermelonBase.rotation.z = Math.sin(time * 0.001) * 0.1;
+                        }
+
+                        if(seedTimer <= 0) endSeedMinigame(false);
+                    }
+
+                } else if (activeFruits && !isTransitioning) {
+                    activeFruits.rotation.y += 0.005; 
+                }
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('DOMContentLoaded', () => { init(); });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puyo Spheres</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Nunito', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        .puyo-ui {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: white;
+            text-shadow: 2px 2px 0px #ff69b4, -2px -2px 0px #00ffff, 4px 4px 0px rgba(0,0,0,0.5);
+        }
+
+        .puyo-panel {
+            background: linear-gradient(135deg, #ff99cc, #ff66b2);
+            border: 4px solid white;
+            border-radius: 30px;
+            box-shadow: 0 10px 0 #cc0066, 0 15px 20px rgba(0,0,0,0.4);
+            padding: 30px;
+        }
+
+        .puyo-btn {
+            background: linear-gradient(to bottom, #a366ff, #7a00cc);
+            border: 3px solid white;
+            border-radius: 40px;
+            box-shadow: 0 6px 0 #4d0099, 0 10px 10px rgba(0,0,0,0.3);
+            transition: all 0.1s ease;
+        }
+        
+        .puyo-btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #4d0099, 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #ui-layer { pointer-events: none; }
+        .interactive { pointer-events: auto; }
+        
+        input {
+            color: #4a0e4e;
+            text-shadow: none;
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-layer" class="absolute inset-0 z-10 flex flex-col justify-between p-4 hidden">
+        <div class="flex justify-between items-start">
+            <div class="puyo-ui text-3xl font-black">Score: <span id="score-val">0</span></div>
+            <div class="puyo-ui text-3xl font-black text-right">
+                Level: <span id="level-val">1</span><br>
+                <span class="text-xl text-yellow-300">Combos: <span id="combo-val">0</span>/10</span>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div id="message-banner" class="puyo-ui text-5xl font-black mb-4 transition-opacity duration-300 opacity-0"></div>
+            <div id="invincible-bar" class="puyo-ui text-4xl font-black text-yellow-300 hidden animate-pulse">INVINCIBLE!</div>
+        </div>
+        
+        <div class="flex justify-center mb-8">
+            <div class="puyo-ui text-2xl bg-black/50 px-6 py-2 rounded-full border-2 border-white">
+                Collected: <span id="stack-val">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="menu-layer" class="absolute inset-0 z-20 flex items-center justify-center interactive bg-black/40 backdrop-blur-sm">
+        <div id="main-menu" class="puyo-panel w-96 text-center">
+            <h1 class="puyo-ui text-5xl font-black mb-8 leading-tight">PUYO<br>SPHERES</h1>
+            <button id="start-btn" class="puyo-btn puyo-ui text-2xl px-8 py-4 w-full mb-4">Start Solo</button>
+            <button id="mp-btn" class="puyo-btn puyo-ui text-2xl px-8 py-4 w-full bg-gradient-to-b from-blue-400 to-blue-600 shadow-[0_6px_0_#004d99] border-white hidden">1v1 Multiplayer</button>
+            <p class="text-white mt-6 font-bold text-sm shadow-md">Use LEFT/RIGHT arrows to steer!<br>Spacebar to jump!</p>
+        </div>
+
+        <div id="mp-menu" class="puyo-panel w-96 text-center hidden">
+            <h2 class="puyo-ui text-4xl font-black mb-6">MULTIPLAYER</h2>
+            <button id="host-btn" class="puyo-btn puyo-ui text-2xl px-8 py-3 w-full mb-6 bg-gradient-to-b from-green-400 to-green-600 shadow-[0_6px_0_#006622]">HOST MATCH</button>
+            <p class="puyo-ui text-xl mb-2 text-white">Enter Room Code:</p>
+            <input type="text" id="room-code-input" maxlength="4" class="w-full text-center text-4xl font-black py-3 rounded-2xl border-4 border-white mb-2 uppercase" placeholder="ABCD">
+            <div id="mp-error" class="text-red-600 font-bold text-sm h-6 mb-4"></div>
+            <button id="join-btn" class="puyo-btn puyo-ui text-2xl px-8 py-3 w-full mb-4">JOIN NOW!</button>
+            <button id="cancel-mp-btn" class="puyo-btn puyo-ui text-xl px-8 py-2 w-full bg-gradient-to-b from-pink-400 to-pink-600 shadow-[0_4px_0_#99004d]">CANCEL</button>
+        </div>
+
+        <div id="waiting-menu" class="puyo-panel w-96 text-center hidden">
+            <h2 class="puyo-ui text-3xl font-black mb-4">Waiting for Opponent...</h2>
+            <p class="text-white font-bold mb-2">Tell your friend to enter this code:</p>
+            <div id="display-room-code" class="puyo-ui text-6xl font-black text-yellow-300 mb-8 tracking-widest">----</div>
+            <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-white mx-auto mb-6"></div>
+            <button id="cancel-wait-btn" class="puyo-btn puyo-ui text-xl px-8 py-2 w-full bg-gradient-to-b from-pink-400 to-pink-600 shadow-[0_4px_0_#99004d]">CANCEL</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        let app, auth, db, currentUser;
+        const appId = typeof __app_id !== 'undefined' ? String(__app_id) : 'puyo-spheres-local';
+        
+        try {
+            let firebaseConfig = {};
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+            
+            // If we have a valid configuration (when running inside the canvas/live environment)
+            if (Object.keys(firebaseConfig).length > 0) {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (token) {
+                    signInWithCustomToken(auth, token).then(() => { 
+                        currentUser = auth.currentUser; 
+                        document.getElementById('mp-btn').classList.remove('hidden'); 
+                    }).catch(e => console.warn("Auth failed", e));
+                } else {
+                    signInAnonymously(auth).then(() => { 
+                        currentUser = auth.currentUser; 
+                        document.getElementById('mp-btn').classList.remove('hidden'); 
+                    }).catch(e => console.warn("Auth failed", e));
+                }
+            } else {
+                console.warn("No Firebase config found. Running in Offline Single-Player Mode.");
+            }
+        } catch (error) {
+            console.warn("Firebase initialization failed. Running in Offline Single-Player Mode.", error);
+        }
+
+        const GAME_STATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2, WIN: 3, MP_LOBBY: 4 };
+        let currentState = GAME_STATE.MENU;
+        
+        let score = 0;
+        let combos = 0;
+        let currentLevel = 1;
+        const MAX_LEVELS = 6;
+        let timeElapsed = 0;
+        
+        let isMultiplayer = false;
+        let isHost = false;
+        let currentRoomId = null;
+        let unsubRoom = null;
+        let opponentData = { x: 0, z: 0, angle: 0, score: 0 };
+        let lastSyncTime = 0;
+        
+        let speed = 25; 
+        const turnSpeed = 4.5;
+        let opponentGroup = null;
+
+        let player = {
+            group: null, mesh: null, velocityY: 0, isJumping: false,
+            angle: 0, collected: [], 
+            tailMeshes: [], upMeshes: [], rightMeshes: [], leftMeshes: [],
+            invincibleTimer: 0, flyingTimer: 0
+        };
+
+        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        
+        const entities = {
+            bonsais: [], spikes: [], movingSpikes: [], fallingSpikes: [],
+            holes: [], skyBonsais: [], salarymen: [], watermelons: [],
+            feathers: [], birds: [], coops: [], decorations: []
+        };
+
+        const BONSAI_COLORS = [0xff0000, 0x0000ff, 0x00ff00, 0xffff00];
+
+        const ui = {
+            layer: document.getElementById('ui-layer'),
+            score: document.getElementById('score-val'),
+            level: document.getElementById('level-val'),
+            combo: document.getElementById('combo-val'),
+            stackCounter: document.getElementById('stack-val'),
+            msg: document.getElementById('message-banner'),
+            invincibleBar: document.getElementById('invincible-bar'),
+            menuLayer: document.getElementById('menu-layer'),
+            mainMenu: document.getElementById('main-menu'),
+            mpMenu: document.getElementById('mp-menu'),
+            waitingMenu: document.getElementById('waiting-menu'),
+            roomCodeInput: document.getElementById('room-code-input'),
+            mpError: document.getElementById('mp-error'),
+            displayCode: document.getElementById('display-room-code')
+        };
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const playBoing = () => {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        };
+
+        const playWoohoo = () => {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        };
+
+        const playSplash = () => {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        };
+
+        // BGM Setup
+        const bgmAudio = new Audio();
+        bgmAudio.src = "High_Rise_Ambition.mp3";
+        bgmAudio.loop = true;
+        bgmAudio.volume = 0.5;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x2a1b4d); // Atmospheric twilight purple
+        scene.fog = new THREE.FogExp2(0x2a1b4d, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer, more atmospheric drop shadows
+        document.body.appendChild(renderer.domElement);
+
+        // Moody Hemisphere Light for ambient color tinting
+        const hemiLight = new THREE.HemisphereLight(0x8a7bba, 0x112233, 0.6); 
+        scene.add(hemiLight);
+        
+        // Dramatic Sunset/Sunrise Directional Light for long drop shadows
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        dirLight.position.set(150, 100, -50); 
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048; // High-res shadows
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -200;
+        dirLight.shadow.camera.right = 200;
+        dirLight.shadow.camera.top = 200;
+        dirLight.shadow.camera.bottom = -200;
+        dirLight.shadow.camera.far = 500;
+        scene.add(dirLight);
+
+        // Infinite Ground
+        const createCheckerboard = () => {
+            const size = 10;
+            const canvas = document.createElement('canvas');
+            canvas.width = size * 2;
+            canvas.height = size * 2;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#654ea3'; // Deep atmospheric purple base
+            context.fillRect(0, 0, size*2, size*2);
+            context.fillStyle = '#eaafc8'; // Pastel pink accents
+            context.fillRect(0, 0, size, size);
+            context.fillRect(size, size, size, size);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(2000, 2000); 
+            return tex;
+        };
+
+        const planeGeo = new THREE.PlaneGeometry(20000, 20000);
+        const planeMat = new THREE.MeshStandardMaterial({ 
+            map: createCheckerboard(), 
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.x = -Math.PI / 2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        const createPressureCooker = (isPurple = false) => {
+            const wrapper = new THREE.Group();
+            const group = new THREE.Group(); // Inner group for dancing animation
+            
+            // Main Pot
+            const potGeo = new THREE.CylinderGeometry(2, 2, 2.5, 16);
+            const potMat = new THREE.MeshStandardMaterial({ 
+                color: isPurple ? 0x9b59b6 : 0xaaaaaa, 
+                metalness: 0.9, 
+                roughness: 0.2,
+                flatShading: true,
+                transparent: isPurple,
+                opacity: isPurple ? 0.6 : 1.0
+            });
+            const pot = new THREE.Mesh(potGeo, potMat);
+            pot.position.y = 1.25; // Shifted up so base is exactly at 0 (prevents floor clipping)
+            pot.castShadow = true;
+            pot.receiveShadow = true;
+            group.add(pot);
+
+            // Lid
+            const lidGeo = new THREE.CylinderGeometry(2.1, 2.1, 0.4, 16);
+            const lidMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            const lid = new THREE.Mesh(lidGeo, lidMat);
+            lid.position.y = 2.7;
+            lid.castShadow = true;
+            group.add(lid);
+
+            // Valve
+            const valveGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 8);
+            const valveMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, metalness: 0.5 });
+            const valve = new THREE.Mesh(valveGeo, valveMat);
+            valve.position.set(1, 3.3, 0);
+            valve.castShadow = true;
+            group.add(valve);
+            
+            // Handles
+            const handleGeo = new THREE.BoxGeometry(4.8, 0.5, 0.8);
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const handles = new THREE.Mesh(handleGeo, handleMat);
+            handles.position.y = 1.25;
+            group.add(handles);
+
+            wrapper.add(group);
+            return wrapper;
+        };
+
+        const createBonsaiGroup = (colorHex) => {
+            const group = new THREE.Group();
+            
+            // Hexagonal Pot
+            const potGeo = new THREE.CylinderGeometry(0.8, 0.6, 1.2, 6);
+            const potMat = new THREE.MeshStandardMaterial({ color: 0xc1440e, roughness: 0.9, flatShading: true });
+            const pot = new THREE.Mesh(potGeo, potMat);
+            pot.position.y = 0.6;
+            pot.castShadow = true;
+            group.add(pot);
+
+            // Blocky Trunk
+            const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 5);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, flatShading: true });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1.8;
+            trunk.castShadow = true;
+            group.add(trunk);
+
+            // Low-poly Leaves
+            const leavesGeo = new THREE.IcosahedronGeometry(1.5, 0);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.7, flatShading: true });
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.y = 3.0;
+            leaves.castShadow = true;
+            group.add(leaves);
+
+            return group;
+        };
+
+        const createMrFreakyBugGroup = () => {
+            const group = new THREE.Group();
+            
+            // Abdomen (Light Blue Bug Body)
+            const abdomenGeo = new THREE.ConeGeometry(1.5, 3.5, 8);
+            const abdomenMat = new THREE.MeshStandardMaterial({ color: 0x87ceeb, flatShading: true });
+            const abdomen = new THREE.Mesh(abdomenGeo, abdomenMat);
+            abdomen.position.set(0, 2.5, -1);
+            abdomen.rotation.x = -Math.PI / 6;
+            abdomen.castShadow = true;
+            group.add(abdomen);
+
+            // Torso (White Shirt)
+            const torsoGeo = new THREE.BoxGeometry(2.5, 2.5, 1.5);
+            const torsoMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+            const torso = new THREE.Mesh(torsoGeo, torsoMat);
+            torso.position.y = 5;
+            torso.castShadow = true;
+            group.add(torso);
+
+            // Tie
+            const tieGeo = new THREE.PlaneGeometry(0.4, 1.8);
+            const tieMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+            const tie = new THREE.Mesh(tieGeo, tieMat);
+            tie.position.set(0, 4.8, 0.76);
+            group.add(tie);
+
+            // Head (Fan)
+            const headGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.8, 16);
+            headGeo.rotateX(Math.PI / 2);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x99aab5, flatShading: true });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 7.2;
+            head.castShadow = true;
+            
+            // Fan center
+            const centerGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.9, 16);
+            centerGeo.rotateX(Math.PI / 2);
+            const centerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
+            const center = new THREE.Mesh(centerGeo, centerMat);
+            head.add(center);
+            
+            // Eyes
+            const eyeGeo = new THREE.IcosahedronGeometry(0.4, 0); 
+            const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222222, flatShading: true });
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(1.4, 0, 0.2);
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-1.4, 0, 0.2);
+            head.add(eyeR);
+            head.add(eyeL);
+            group.add(head);
+
+            // Briefcase
+            const caseGeo = new THREE.BoxGeometry(0.6, 1.5, 2);
+            const caseMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, flatShading: true });
+            const briefcase = new THREE.Mesh(caseGeo, caseMat);
+            briefcase.position.set(1.6, 4, 0);
+            briefcase.castShadow = true;
+            group.add(briefcase);
+
+            // Wings
+            const wingGeo = new THREE.PlaneGeometry(2, 5);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const wingR = new THREE.Mesh(wingGeo, wingMat);
+            wingR.position.set(1, 5, -1.2);
+            wingR.rotation.x = -Math.PI / 8;
+            wingR.rotation.y = -Math.PI / 6;
+            const wingL = new THREE.Mesh(wingGeo, wingMat);
+            wingL.position.set(-1, 5, -1.2);
+            wingL.rotation.x = -Math.PI / 8;
+            wingL.rotation.y = Math.PI / 6;
+            group.add(wingR);
+            group.add(wingL);
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.15, 0.1, 2, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const legR = new THREE.Mesh(legGeo, legMat);
+            legR.position.set(0.8, 1, -0.5);
+            legR.rotation.z = -0.2;
+            const legL = new THREE.Mesh(legGeo, legMat);
+            legL.position.set(-0.8, 1, -0.5);
+            legL.rotation.z = 0.2;
+            group.add(legR);
+            group.add(legL);
+
+            return group;
+        };
+
+        const createSpikeMesh = (isRed = false) => {
+            const geo = new THREE.IcosahedronGeometry(2.0, 1);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: isRed ? 0xff3333 : 0xaaaaaa, 
+                roughness: 0.7,
+                flatShading: true 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 2;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        };
+        
+        const createHoleMesh = () => {
+            const group = new THREE.Group();
+            const geo = new THREE.CylinderGeometry(3, 3, 0.1, 8); // Octagonal hole
+            const mat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 0.05;
+            group.add(mesh);
+            return group;
+        };
+
+        const createWatermelonMesh = () => {
+            const group = new THREE.Group();
+            // Low-poly watermelon
+            const geo = new THREE.IcosahedronGeometry(1.5, 1);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x22aa22, roughness: 0.6, flatShading: true });
+            const wm = new THREE.Mesh(geo, mat);
+            wm.castShadow = true;
+            
+            // Blocky Stripes
+            const stripeGeo = new THREE.TorusGeometry(1.55, 0.1, 4, 12);
+            const stripeMat = new THREE.MeshStandardMaterial({ color: 0x004400, flatShading: true });
+            for(let i=0; i<4; i++) {
+                const s = new THREE.Mesh(stripeGeo, stripeMat);
+                s.rotation.y = (Math.PI/4) * i;
+                wm.add(s);
+            }
+            group.add(wm);
+            group.position.y = 2.0;
+            return group;
+        };
+
+        const createFeatherMesh = () => {
+            const group = new THREE.Group();
+            // Blocky feather
+            const geo = new THREE.CylinderGeometry(0.1, 0.5, 3, 4);
+            geo.translate(0, 1.5, 0);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, flatShading: true });
+            const feather = new THREE.Mesh(geo, mat);
+            feather.scale.z = 0.1;
+            feather.rotation.z = Math.PI / 4;
+            feather.castShadow = true;
+            group.add(feather);
+            group.position.y = 2.0;
+            return group;
+        };
+
+        const createBirdGroup = () => {
+            const group = new THREE.Group();
+            // Low-poly sphere body instead of cone
+            const bodyGeo = new THREE.IcosahedronGeometry(1.5, 0);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, flatShading: true });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.castShadow = true;
+            group.add(body);
+            
+            const wingGeo = new THREE.BoxGeometry(8, 0.2, 2);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0x990000, flatShading: true });
+            const wings = new THREE.Mesh(wingGeo, wingMat);
+            wings.castShadow = true;
+            group.add(wings);
+            
+            const beakGeo = new THREE.ConeGeometry(0.5, 2, 4); // Blocky 4-sided beak
+            beakGeo.rotateX(Math.PI / 2);
+            const beakMat = new THREE.MeshStandardMaterial({ color: 0xffff00, flatShading: true });
+            const beak = new THREE.Mesh(beakGeo, beakMat);
+            beak.position.z = 1.5;
+            beak.castShadow = true;
+            group.add(beak);
+            return group;
+        };
+
+        const createChickenGroup = () => {
+            const group = new THREE.Group();
+            const bodyGeo = new THREE.IcosahedronGeometry(0.8, 0);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.castShadow = true;
+            group.add(body);
+            
+            const combGeo = new THREE.BoxGeometry(0.2, 0.5, 0.6);
+            const combMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const comb = new THREE.Mesh(combGeo, combMat);
+            comb.position.set(0, 0.8, 0.2);
+            group.add(comb);
+            
+            const beakGeo = new THREE.ConeGeometry(0.2, 0.5, 4);
+            beakGeo.rotateX(Math.PI/2);
+            const beakMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
+            const beak = new THREE.Mesh(beakGeo, beakMat);
+            beak.position.set(0, 0.3, 0.9);
+            group.add(beak);
+            
+            group.position.y = 0.8;
+            return group;
+        };
+
+        const createCoopGroup = (colorHex) => {
+            const group = new THREE.Group();
+            const fenceMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
+            for(let i=0; i<4; i++) {
+                const fenceGeo = new THREE.BoxGeometry(16, 2, 0.5);
+                const fence = new THREE.Mesh(fenceGeo, fenceMat);
+                fence.position.y = 1;
+                if(i===0) fence.position.set(0, 1, -8);
+                if(i===1) fence.position.set(0, 1, 8);
+                if(i===2) { fence.rotation.y = Math.PI/2; fence.position.set(-8, 1, 0); }
+                if(i===3) { fence.rotation.y = Math.PI/2; fence.position.set(8, 1, 0); }
+                fence.castShadow = true;
+                group.add(fence);
+            }
+
+            const roofGeo = new THREE.ConeGeometry(6, 5, 4);
+            roofGeo.rotateY(Math.PI/4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: colorHex, flatShading: true });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.set(0, 6, 0);
+            roof.castShadow = true;
+            group.add(roof);
+
+            const pillarGeo = new THREE.BoxGeometry(1, 4, 1);
+            for(let x of [-3, 3]) {
+                for(let z of [-3, 3]) {
+                    const p = new THREE.Mesh(pillarGeo, fenceMat);
+                    p.position.set(x, 2, z);
+                    group.add(p);
+                }
+            }
+            return group;
+        };
+
+        const createRockMesh = () => {
+            const geo = new THREE.IcosahedronGeometry(Math.random() * 3 + 2, 0);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x666666, flatShading: true });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 0;
+            mesh.rotation.set(Math.random(), Math.random(), Math.random());
+            mesh.scale.set(1, Math.random()*0.5 + 0.5, 1);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        };
+
+        const snapToGrid = (val) => Math.round(val / 15) * 15;
+
+        const spawnFeather = (x, z) => {
+            const group = createFeatherMesh();
+            group.position.set(x, 2.0, z);
+            scene.add(group);
+            entities.feathers.push({ group });
+        };
+
+        const spawnBird = (x, z) => {
+            const group = createBirdGroup();
+            group.position.set(x, 25, z);
+            scene.add(group);
+            entities.birds.push({ group, flapTime: Math.random() * 10 });
+        };
+
+        const spawnBonsai = (x, z) => {
+            const color = BONSAI_COLORS[Math.floor(Math.random() * BONSAI_COLORS.length)];
+            const group = createBonsaiGroup(color);
+            group.position.set(x, 0, z);
+            scene.add(group);
+            entities.bonsais.push({ group, colorHex: color, jumpTimer: Math.random() * 5 });
+        };
+
+        const spawnSkyBonsai = (x, z) => {
+            const color = BONSAI_COLORS[Math.floor(Math.random() * BONSAI_COLORS.length)];
+            const group = createBonsaiGroup(color);
+            group.position.set(x, 15, z); 
+            scene.add(group);
+            entities.skyBonsais.push({ group, colorHex: color, jumpTimer: Math.random() * 5 });
+        };
+
+        const spawnSalaryman = (x, z) => {
+            const group = createMrFreakyBugGroup();
+            group.position.set(x, 0, z);
+            scene.add(group);
+            entities.salarymen.push({ group, active: false });
+        };
+
+        const spawnSpike = (x, z) => {
+            const mesh = createSpikeMesh();
+            mesh.position.set(x, 2.0, z);
+            scene.add(mesh);
+            entities.spikes.push({ mesh });
+        };
+
+        const spawnMovingSpike = (x, z) => {
+            const mesh = createSpikeMesh(true);
+            mesh.position.set(x, 2.0, z);
+            scene.add(mesh);
+            entities.movingSpikes.push({ mesh, startX: x, timeOffset: Math.random() * 10 });
+        };
+        
+        const spawnFallingSpike = (x, z) => {
+            const mesh = createSpikeMesh();
+            mesh.position.set(x, 50, z); 
+            mesh.rotation.x = Math.PI; 
+            scene.add(mesh);
+            entities.fallingSpikes.push({ mesh, fallSpeed: 0, grounded: false });
+        };
+
+        const spawnGeyserHole = (x, z) => {
+            const group = createHoleMesh();
+            group.position.set(x, 0, z);
+            scene.add(group);
+            entities.holes.push({ group, activeTimer: 0 });
+        };
+
+        const spawnWatermelon = (x, z) => {
+            const group = createWatermelonMesh();
+            group.position.set(x, 2.0, z);
+            scene.add(group);
+            entities.watermelons.push({ group });
+        };
+
+        const spawnCoop = (x, z) => {
+            const color = BONSAI_COLORS[Math.floor(Math.random() * BONSAI_COLORS.length)];
+            const group = createCoopGroup(color);
+            group.position.set(x, 0, z);
+            scene.add(group);
+            const chickens = [];
+            for(let i=0; i<3; i++) {
+                const c = createChickenGroup();
+                c.position.set(x + (Math.random()-0.5)*10, 0, z + (Math.random()-0.5)*10);
+                scene.add(c);
+                chickens.push({ mesh: c, hopTime: Math.random()*10 });
+            }
+            entities.coops.push({ group, colorHex: color, chickens: chickens, active: true });
+        };
+
+        const spawnRock = (x, z) => {
+            const mesh = createRockMesh();
+            mesh.position.set(x, 0, z);
+            scene.add(mesh);
+            entities.decorations.push({ mesh });
+        };
+
+        const clearEntities = () => {
+            Object.values(entities).forEach(arr => {
+                arr.forEach(e => {
+                    scene.remove(e.mesh || e.group);
+                    if(e.chickens) e.chickens.forEach(c => scene.remove(c.mesh));
+                });
+                arr.length = 0;
+            });
+            [player.tailMeshes, player.upMeshes, player.rightMeshes, player.leftMeshes].forEach(arr => {
+                arr.forEach(m => scene.remove(m));
+                arr.length = 0;
+            });
+            player.collected = [];
+            ui.stackCounter.innerText = 0;
+        };
+
+        const rebuildStackAndTailVisuals = () => {
+            [player.tailMeshes, player.upMeshes, player.rightMeshes, player.leftMeshes].forEach(arr => {
+                arr.forEach(m => scene.remove(m));
+                arr.length = 0;
+            });
+
+            player.collected.forEach((color, idx) => {
+                const mesh = createBonsaiGroup(color);
+                mesh.scale.set(0.6, 0.6, 0.6); 
+                scene.add(mesh);
+
+                const slot = idx % 4;
+                if (slot === 0) player.tailMeshes.push(mesh);
+                else if (slot === 1) player.upMeshes.push(mesh);
+                else if (slot === 2) player.rightMeshes.push(mesh);
+                else player.leftMeshes.push(mesh);
+            });
+            ui.stackCounter.innerText = player.collected.length;
+        };
+
+        const addBonsaiToPlayer = (color) => {
+            player.collected.push(color);
+            playBoing();
+            rebuildStackAndTailVisuals();
+            checkCombos();
+        };
+
+        const showMessage = (text, color = "white", duration = 2000) => {
+            ui.msg.innerText = text;
+            ui.msg.style.color = color;
+            ui.msg.classList.remove('opacity-0');
+            setTimeout(() => ui.msg.classList.add('opacity-0'), duration);
+        };
+
+        const checkCombos = () => {
+            if (player.collected.length >= 3) {
+                const len = player.collected.length;
+                const c1 = player.collected[len-1];
+                const c2 = player.collected[len-2];
+                const c3 = player.collected[len-3];
+                
+                if (c1 === c2 && c2 === c3) {
+                    player.collected.splice(len-3, 3);
+                    combos++;
+                    score += 100 * combos;
+                    ui.combo.innerText = combos;
+                    ui.score.innerText = score;
+                    playWoohoo();
+                    showMessage(`COMBO! x${combos}`, "#ffff00");
+                    rebuildStackAndTailVisuals();
+                    
+                    if (!isMultiplayer && combos >= 10) {
+                        levelUp();
+                    }
+                }
+            }
+        };
+
+        const levelUp = () => {
+            if (currentLevel >= MAX_LEVELS) {
+                endGame(true);
+                return;
+            }
+            currentLevel++;
+            combos = 0;
+            ui.combo.innerText = combos;
+            ui.level.innerText = currentLevel;
+            speed = 25 + (currentLevel * 10); 
+            showMessage(`LEVEL ${currentLevel}!`, "#00ffff", 3000);
+            respawnPlayer();
+        };
+
+        const updateTailAndStack = () => {
+            const fwdX = Math.sin(player.angle);
+            const fwdZ = Math.cos(player.angle);
+            const rightX = Math.cos(player.angle);
+            const rightZ = -Math.sin(player.angle);
+
+            const updateGroup = (meshes, baseOffsetX, baseOffsetY, baseOffsetZ, isStacked) => {
+                for (let i = 0; i < meshes.length; i++) {
+                    const mesh = meshes[i];
+                    
+                    let targetX, targetY, targetZ;
+
+                    if (isStacked) {
+                        // Stacked firmly on head but swaying slightly, accounting for the player's bounce height!
+                        targetX = player.group.position.x;
+                        targetZ = player.group.position.z;
+                        targetY = player.group.position.y + player.mesh.position.y + baseOffsetY + (i * 2.5); 
+                        
+                        const sway = Math.sin(timeElapsed * 10 + i) * 0.5 * (keys.ArrowLeft || keys.ArrowRight ? 1 : 0);
+                        mesh.position.x += (targetX + (rightX * sway) - mesh.position.x) * 0.3;
+                        mesh.position.z += (targetZ + (rightZ * sway) - mesh.position.z) * 0.3;
+                        mesh.position.y += (targetY - mesh.position.y) * 0.5;
+                        mesh.rotation.y = player.angle;
+                    } else {
+                        // Pikmin swarming on ground
+                        const anchorX = player.group.position.x - (fwdX * baseOffsetZ) + (rightX * baseOffsetX);
+                        const anchorZ = player.group.position.z - (fwdZ * baseOffsetZ) + (rightZ * baseOffsetX);
+                        const anchorY = player.group.position.y + baseOffsetY;
+                        
+                        const clamorSpeed = 8 + (i % 3); 
+                        const spread = 3.0 + (i * 0.2); 
+                        const noiseX = Math.sin(timeElapsed * clamorSpeed + i * 2.5) * spread;
+                        const noiseZ = Math.cos(timeElapsed * (clamorSpeed * 0.8) + i * 1.5) * spread;
+
+                        targetX = anchorX + noiseX;
+                        targetZ = anchorZ + noiseZ;
+                        
+                        // Hop animation like Pikmin walking
+                        const hop = Math.abs(Math.sin(timeElapsed * 20 + i)) * 1.2;
+                        
+                        mesh.position.x += (targetX - mesh.position.x) * 0.15;
+                        mesh.position.z += (targetZ - mesh.position.z) * 0.15;
+                        mesh.position.y += ((anchorY + hop) - mesh.position.y) * 0.2;
+                        
+                        // Frantic rotation
+                        mesh.rotation.y = player.angle + Math.sin(timeElapsed * 15 + i) * 0.5;
+                        mesh.rotation.z = Math.sin(timeElapsed * 18 + i) * 0.2; 
+                        mesh.rotation.x = Math.sin(timeElapsed * 12 + i) * 0.2; 
+                    }
+                }
+            };
+            
+            updateGroup(player.tailMeshes, 0, 0, 10, false); // Tail
+            updateGroup(player.upMeshes, 0, 3.8, 0, true);   // Up (Stacked exactly on top of valve)
+            updateGroup(player.rightMeshes, 8, 0, 0, false); // Right swarm
+            updateGroup(player.leftMeshes, -8, 0, 0, false); // Left swarm
+        };
+
+        const respawnPlayer = () => {
+            player.group.position.y = 25; 
+            player.velocityY = -10;
+            player.isJumping = true;
+            player.invincibleTimer = 3; 
+            player.flyingTimer = 0;
+            
+            const clearRadius = 25;
+            [entities.spikes, entities.movingSpikes, entities.fallingSpikes, entities.salarymen, entities.birds, entities.coops, entities.decorations].forEach(arr => {
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i].mesh && player.group.position.distanceTo(arr[i].mesh.position) < clearRadius) {
+                        scene.remove(arr[i].mesh);
+                        arr.splice(i, 1);
+                    } else if (arr[i].group && player.group.position.distanceTo(arr[i].group.position) < clearRadius) {
+                        scene.remove(arr[i].group);
+                        if(arr[i].chickens) arr[i].chickens.forEach(c => scene.remove(c.mesh));
+                        arr.splice(i, 1);
+                    }
+                }
+            });
+        };
+
+        const initGame = (mp = false) => {
+            currentState = GAME_STATE.PLAYING;
+            isMultiplayer = mp;
+            score = 0; combos = 0; currentLevel = 1; timeElapsed = 0;
+            ui.score.innerText = score;
+            ui.combo.innerText = combos;
+            ui.level.innerText = isMultiplayer ? "MP" : currentLevel;
+            ui.layer.classList.remove('hidden');
+            ui.menuLayer.classList.add('hidden');
+            
+            speed = isMultiplayer ? 35 : 25;
+
+            bgmAudio.currentTime = 0;
+            bgmAudio.play().catch(e => console.log("Audio play blocked by browser until interaction."));
+
+            if (!player.group) {
+                player.group = createPressureCooker();
+                player.mesh = player.group.children[0];
+                scene.add(player.group);
+            }
+
+            if (isMultiplayer && !opponentGroup) {
+                opponentGroup = createPressureCooker(true); 
+                scene.add(opponentGroup);
+            } else if (!isMultiplayer && opponentGroup) {
+                scene.remove(opponentGroup);
+                opponentGroup = null;
+            }
+
+            clearEntities();
+            player.group.position.set(0, 0, 0);
+            player.angle = 0;
+            player.velocityY = 0;
+            player.isJumping = false;
+            player.invincibleTimer = 0;
+            player.flyingTimer = 0;
+
+            for(let i=0; i<120; i++) {
+                spawnBonsai((Math.random() - 0.5) * 800, (Math.random() - 0.5) * 800 + 100);
+            }
+            for(let i=0; i<80; i++) {
+                spawnRock((Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 1000 + 100);
+            }
+            for(let i=0; i<10; i++) {
+                spawnCoop((Math.random() - 0.5) * 800, (Math.random() - 0.5) * 800 + 200);
+            }
+
+            showMessage(isMultiplayer ? "GO!" : "LEVEL 1", "#00ffff");
+        };
+
+        const endGame = (win = false) => {
+            currentState = win ? GAME_STATE.WIN : GAME_STATE.GAMEOVER;
+            bgmAudio.pause();
+            ui.layer.classList.add('hidden');
+            ui.menuLayer.classList.remove('hidden');
+            ui.mainMenu.classList.remove('hidden');
+            ui.mpMenu.classList.add('hidden');
+            ui.waitingMenu.classList.add('hidden');
+            
+            const msg = win ? "YOU WIN!" : "GAME OVER";
+            document.querySelector('#main-menu h1').innerHTML = `${msg}<br><span class="text-2xl">Score: ${score}</span>`;
+            
+            if (isMultiplayer && unsubRoom) {
+                unsubRoom();
+                unsubRoom = null;
+            }
+        };
+
+        const generateCode = () => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = '';
+            for (let i = 0; i < 4; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        };
+
+        const hostMatch = async () => {
+            if (!db) {
+                ui.mpError.innerText = "Offline Mode - Multiplayer Disabled.";
+                return;
+            }
+            try {
+                isHost = true;
+                const code = generateCode();
+                currentRoomId = code;
+                
+                ui.mpMenu.classList.add('hidden');
+                ui.waitingMenu.classList.remove('hidden');
+                ui.displayCode.innerText = code;
+
+                const roomRef = doc(db, 'puyo-rooms', String(code));
+                await setDoc(roomRef, {
+                    host: currentUser.uid,
+                    joiner: null,
+                    started: false,
+                    hostData: { x: 0, z: 0, angle: 0, score: 0 },
+                    joinerData: { x: 0, z: 0, angle: 0, score: 0 }
+                });
+
+                unsubRoom = onSnapshot(roomRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().started && currentState !== GAME_STATE.PLAYING) {
+                        initGame(true);
+                    }
+                });
+            } catch (err) {
+                ui.mpError.innerText = "Error hosting. Check connection.";
+                console.error(err);
+            }
+        };
+
+        const joinMatch = async () => {
+            if (!db) {
+                ui.mpError.innerText = "Offline Mode - Multiplayer Disabled.";
+                return;
+            }
+            
+            const codeInput = ui.roomCodeInput.value.toUpperCase();
+            if (codeInput.length !== 4) {
+                ui.mpError.innerText = "Code must be 4 characters.";
+                return;
+            }
+
+            const btn = document.getElementById('join-btn');
+            btn.innerText = "Connecting...";
+            btn.disabled = true;
+            ui.mpError.innerText = "";
+
+            try {
+                // Check safety timeout
+                const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
+                
+                const joinTask = async () => {
+                    const roomRef = doc(db, 'puyo-rooms', String(codeInput));
+                    const docSnap = await getDoc(roomRef);
+
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.started) {
+                            throw new Error("Match already started.");
+                        }
+                        
+                        isHost = false;
+                        currentRoomId = codeInput;
+                        await updateDoc(roomRef, { joiner: currentUser.uid, started: true });
+                        initGame(true);
+                    } else {
+                        throw new Error("Room not found.");
+                    }
+                };
+
+                await Promise.race([joinTask(), timeout]);
+
+            } catch (error) {
+                console.error("Join error:", error);
+                if (error.message === "Timeout") {
+                    ui.mpError.innerText = "Connection timed out. Check network.";
+                } else if (error.message === "Match already started." || error.message === "Room not found.") {
+                    ui.mpError.innerText = error.message;
+                } else {
+                    ui.mpError.innerText = "Connection Error. Try again.";
+                }
+            } finally {
+                btn.innerText = "JOIN NOW!";
+                btn.disabled = false;
+            }
+        };
+
+        const syncNetwork = async () => {
+            if (!isMultiplayer || !currentRoomId || !db) return;
+            const now = Date.now();
+            if (now - lastSyncTime < 50) return; // ~20fps sync
+            lastSyncTime = now;
+
+            const roomRef = doc(db, 'puyo-rooms', String(currentRoomId));
+            const myData = { x: player.group.position.x, z: player.group.position.z, angle: player.angle, score: combos };
+
+            try {
+                if (isHost) {
+                    await updateDoc(roomRef, { hostData: myData });
+                } else {
+                    await updateDoc(roomRef, { joinerData: myData });
+                }
+
+                const docSnap = await getDoc(roomRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    opponentData = isHost ? data.joinerData : data.hostData;
+                }
+            } catch (e) {
+                // Silent fail for minor sync drops
+            }
+        };
+
+        document.getElementById('start-btn').addEventListener('click', () => initGame(false));
+        
+        document.getElementById('mp-btn').addEventListener('click', () => {
+            ui.mainMenu.classList.add('hidden');
+            ui.mpMenu.classList.remove('hidden');
+            ui.mpError.innerText = "";
+        });
+
+        document.getElementById('cancel-mp-btn').addEventListener('click', () => {
+            ui.mpMenu.classList.add('hidden');
+            ui.mainMenu.classList.remove('hidden');
+        });
+
+        document.getElementById('cancel-wait-btn').addEventListener('click', () => {
+            if (unsubRoom) { unsubRoom(); unsubRoom = null; }
+            ui.waitingMenu.classList.add('hidden');
+            ui.mainMenu.classList.remove('hidden');
+        });
+
+        document.getElementById('host-btn').addEventListener('click', hostMatch);
+        document.getElementById('join-btn').addEventListener('click', joinMatch);
+        
+        ui.roomCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinMatch();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            // Ignore input if user is typing a room code
+            if (document.activeElement.tagName === 'INPUT') return;
+
+            // Prevent default browser scrolling when using game controls
+            if (currentState === GAME_STATE.PLAYING && (['ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) || [' ', 'ArrowLeft', 'ArrowRight'].includes(e.key))) {
+                e.preventDefault();
+            }
+
+            // Support both Arrow Keys and A/D keys for steering!
+            if (e.code === 'ArrowLeft' || e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.ArrowLeft = true;
+            if (e.code === 'ArrowRight' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.ArrowRight = true;
+            
+            if (e.code === 'Space' || e.key === ' ') {
+                if (!player.isJumping && currentState === GAME_STATE.PLAYING && player.flyingTimer <= 0) {
+                    player.isJumping = true;
+                    player.velocityY = 25;
+                }
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.ArrowLeft = false;
+            if (e.code === 'ArrowRight' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.ArrowRight = false;
+        });
+
+        const clock = new THREE.Clock();
+
+        const animate = () => {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1); 
+
+            if (currentState !== GAME_STATE.PLAYING) {
+                renderer.render(scene, camera);
+                return;
+            }
+
+            timeElapsed += dt;
+            
+            if (isMultiplayer) syncNetwork();
+
+            if (isMultiplayer && opponentGroup && opponentData) {
+                opponentGroup.position.x += (opponentData.x - opponentGroup.position.x) * 10 * dt;
+                opponentGroup.position.z += (opponentData.z - opponentGroup.position.z) * 10 * dt;
+                opponentGroup.rotation.y = opponentData.angle;
+                
+                // Ghost opponent dancing
+                opponentGroup.children[0].position.y = 1.0 + Math.abs(Math.sin(timeElapsed * 10)) * 1.5;
+                opponentGroup.children[0].rotation.z = Math.sin(timeElapsed * 15) * 0.2;
+                opponentGroup.children[0].rotation.x = Math.sin(timeElapsed * 10) * 0.1;
+                opponentGroup.children[0].rotation.y += speed * dt * 1.5; 
+            } else {
+                // Solo Difficulty Scaling
+                speed = 45 + (currentLevel * 15) + (timeElapsed * 0.1);
+            }
+
+            if (keys.ArrowLeft) player.angle += turnSpeed * dt;
+            if (keys.ArrowRight) player.angle -= turnSpeed * dt;
+
+            player.group.position.x += Math.sin(player.angle) * speed * dt;
+            player.group.position.z += Math.cos(player.angle) * speed * dt;
+
+            // Hovering and Dancing Pressure Cooker
+            player.mesh.position.y = 1.0 + Math.abs(Math.sin(timeElapsed * 10)) * 1.5; // Hover and bounce
+            player.mesh.rotation.z = Math.sin(timeElapsed * 15) * 0.2; // Wiggle side to side
+            player.mesh.rotation.x = Math.sin(timeElapsed * 10) * 0.1; // Wiggle front to back
+            player.mesh.rotation.y += speed * dt * 1.5; // Spinning while dancing
+            player.group.rotation.y = player.angle; 
+
+            if (player.flyingTimer > 0) {
+                player.flyingTimer -= dt;
+                player.isJumping = false; 
+                player.group.position.y += (25 - player.group.position.y) * 5 * dt; 
+            } else if (player.isJumping) {
+                player.velocityY -= 60 * dt; 
+                player.group.position.y += player.velocityY * dt;
+                if (player.group.position.y <= 0) {
+                    player.group.position.y = 0;
+                    player.isJumping = false;
+                    player.velocityY = 0;
+                }
+            } else {
+                // Smoothly slide to exact ground level with clipping guard
+                player.group.position.y += (0 - player.group.position.y) * 5 * dt; 
+                if (player.group.position.y < 0) player.group.position.y = 0;
+            }
+
+            // Invincibility Status Text
+            if (player.flyingTimer > 0) {
+                ui.invincibleBar.innerText = "FLYING!";
+                ui.invincibleBar.classList.remove('hidden');
+                ui.invincibleBar.style.color = "#00ffff"; 
+            } else if (player.invincibleTimer > 0) {
+                ui.invincibleBar.innerText = "INVINCIBLE!";
+                ui.invincibleBar.classList.remove('hidden');
+                ui.invincibleBar.style.color = "#fef08a"; 
+            } else {
+                ui.invincibleBar.classList.add('hidden');
+            }
+
+            if (player.invincibleTimer > 0) {
+                player.invincibleTimer -= dt;
+                player.mesh.material.color.setHex(Math.random() * 0xffffff); 
+                if (player.invincibleTimer <= 0) {
+                    player.mesh.material.color.setHex(isMultiplayer && !isHost ? 0x9b59b6 : 0x2ecc71);
+                }
+            }
+
+            updateTailAndStack();
+
+            // Dynamic Camera Setup
+            const camDist = 35; 
+            const camHeight = 18; 
+            const camX = player.group.position.x - Math.sin(player.angle) * camDist;
+            const camZ = player.group.position.z - Math.cos(player.angle) * camDist;
+            
+            camera.position.x += (camX - camera.position.x) * 0.1;
+            camera.position.z += (camZ - camera.position.z) * 0.1;
+            camera.position.y += (player.group.position.y + camHeight - camera.position.y) * 0.1;
+            
+            const targetLookX = player.group.position.x + Math.sin(player.angle) * 10;
+            const targetLookZ = player.group.position.z + Math.cos(player.angle) * 10;
+            camera.lookAt(targetLookX, player.group.position.y, targetLookZ);
+
+            // Spawning Logic
+            if (Math.random() < 0.35 + (currentLevel * 0.05)) {
+                const spawnDist = 250;
+                const sx = player.group.position.x + Math.sin(player.angle) * spawnDist + (Math.random() - 0.5) * 200;
+                const sz = player.group.position.z + Math.cos(player.angle) * spawnDist + (Math.random() - 0.5) * 200;
+                
+                const r = Math.random();
+                const lvlFactor = currentLevel * 2;
+
+                if (r < 0.4 && entities.bonsais.length < 150) spawnBonsai(sx, sz);
+                else if (r < 0.5 && entities.decorations.length < 100) spawnRock(sx, sz);
+                else if (r < 0.6 && entities.spikes.length < 30 + lvlFactor) spawnSpike(sx, sz);
+                else if (r < 0.7 && entities.coops.length < 8) spawnCoop(sx, sz);
+                else if (r < 0.8 && entities.movingSpikes.length < 15 + lvlFactor) spawnMovingSpike(sx, sz);
+                else if (r < 0.88 && entities.salarymen.length < 15 + lvlFactor) spawnSalaryman(sx, sz);
+                else if (r < 0.94 && entities.fallingSpikes.length < 12 + lvlFactor) spawnFallingSpike(sx, sz);
+                else if (r < 0.96 && entities.holes.length < 8) spawnGeyserHole(sx, sz);
+                else if (r < 0.98 && entities.watermelons.length < 5) spawnWatermelon(sx, sz);
+                else if (r < 0.99 && entities.feathers.length < 4) spawnFeather(sx, sz);
+                else if (entities.birds.length < 5 + lvlFactor) spawnBird(sx, sz);
+            }
+
+            const pRadius = 2.0;
+            const isInvincible = player.invincibleTimer > 0 || player.flyingTimer > 0;
+
+            // Dancing Bonsais
+            for (let i = entities.bonsais.length - 1; i >= 0; i--) {
+                const b = entities.bonsais[i];
+                b.jumpTimer -= dt;
+                
+                // Bobbing to the beat
+                b.group.position.y = Math.abs(Math.sin(timeElapsed * 5 + i)) * 0.5;
+                
+                // High jump dance
+                if (b.jumpTimer <= 0) {
+                    b.group.position.y += Math.abs(Math.sin((b.jumpTimer * -1) * 10)) * 5;
+                    b.group.rotation.y += dt * 10;
+                    if (b.jumpTimer < -0.3) {
+                        b.jumpTimer = 2 + Math.random() * 3;
+                        b.group.rotation.y = 0;
+                    }
+                }
+
+                if (player.group.position.y < 5 && player.group.position.distanceTo(b.group.position) < pRadius + 1.0) {
+                    addBonsaiToPlayer(b.colorHex);
+                    scene.remove(b.group);
+                    entities.bonsais.splice(i, 1);
+                }
+            }
+            
+            // Sky Bonsais
+            for (let i = entities.skyBonsais.length - 1; i >= 0; i--) {
+                const b = entities.skyBonsais[i];
+                b.group.rotation.y += dt;
+                if (player.group.position.distanceTo(b.group.position) < pRadius + 1.5) {
+                    addBonsaiToPlayer(b.colorHex);
+                    scene.remove(b.group);
+                    entities.skyBonsais.splice(i, 1);
+                }
+            }
+
+            // Obstacles
+            for (let i = entities.spikes.length - 1; i >= 0; i--) {
+                if (player.group.position.y < 4 && player.group.position.distanceTo(entities.spikes[i].mesh.position) < pRadius + 1.0) {
+                    if (isInvincible) {
+                        scene.remove(entities.spikes[i].mesh);
+                        entities.spikes.splice(i, 1);
+                    } else {
+                        if (isMultiplayer) { combos = Math.max(0, combos - 1); respawnPlayer(); } else { endGame(false); return; }
+                    }
+                }
+            }
+
+            // Moving Spikes
+            for (let i = entities.movingSpikes.length - 1; i >= 0; i--) {
+                const s = entities.movingSpikes[i];
+                s.mesh.position.x = s.startX + Math.sin(timeElapsed * 3 + s.timeOffset) * 20;
+                if (player.group.position.y < 4 && player.group.position.distanceTo(s.mesh.position) < pRadius + 1.0) {
+                    if (isInvincible) {
+                        scene.remove(s.mesh);
+                        entities.movingSpikes.splice(i, 1);
+                    } else {
+                        if (isMultiplayer) { combos = Math.max(0, combos - 1); respawnPlayer(); } else { endGame(false); return; }
+                    }
+                }
+            }
+            
+            // Falling Spikes
+            for (let i = entities.fallingSpikes.length - 1; i >= 0; i--) {
+                const s = entities.fallingSpikes[i];
+                if (!s.grounded) {
+                    s.fallSpeed += 50 * dt;
+                    s.mesh.position.y -= s.fallSpeed * dt;
+                    if (s.mesh.position.y <= 2) {
+                        s.mesh.position.y = 2;
+                        s.grounded = true;
+                    }
+                }
+                if (player.group.position.distanceTo(s.mesh.position) < pRadius + 1.0) {
+                    if (isInvincible) {
+                        scene.remove(s.mesh);
+                        entities.fallingSpikes.splice(i, 1);
+                    } else {
+                        if (isMultiplayer) { combos = Math.max(0, combos - 1); respawnPlayer(); } else { endGame(false); return; }
+                    }
+                }
+            }
+
+            // Salarymen
+            for (let i = entities.salarymen.length - 1; i >= 0; i--) {
+                const s = entities.salarymen[i];
+                const dist = player.group.position.distanceTo(s.group.position);
+                
+                if (dist < 40) s.active = true;
+                
+                if (s.active && player.group.position.y < 10) {
+                    const dx = player.group.position.x - s.group.position.x;
+                    const dz = player.group.position.z - s.group.position.z;
+                    const angleToPlayer = Math.atan2(dx, dz);
+                    s.group.rotation.y = angleToPlayer;
+                    s.group.position.x += Math.sin(angleToPlayer) * (speed * 0.5) * dt; 
+                    s.group.position.z += Math.cos(angleToPlayer) * (speed * 0.5) * dt;
+                    
+                    if(s.group.children[5]) s.group.children[5].rotation.x = -Math.PI / 8 + Math.sin(timeElapsed * 20) * 0.5;
+                    if(s.group.children[6]) s.group.children[6].rotation.x = -Math.PI / 8 - Math.sin(timeElapsed * 20) * 0.5;
+                    if(s.group.children[7]) s.group.children[7].rotation.x = Math.sin(timeElapsed * 15) * 0.5;
+                    if(s.group.children[8]) s.group.children[8].rotation.x = -Math.sin(timeElapsed * 15) * 0.5;
+                }
+
+                if (dist < pRadius + 2.5) {
+                    if (isInvincible) {
+                        scene.remove(s.group);
+                        entities.salarymen.splice(i, 1);
+                    } else {
+                        if (isMultiplayer) { combos = Math.max(0, combos - 1); respawnPlayer(); } else { endGame(false); return; }
+                    }
+                }
+            }
+
+            // Coops & Chickens
+            for (let i = entities.coops.length - 1; i >= 0; i--) {
+                const coop = entities.coops[i];
+                
+                coop.chickens.forEach(c => {
+                    c.hopTime += dt;
+                    c.mesh.position.y = 0.8 + Math.abs(Math.sin(c.hopTime * 8)) * 1.5;
+                    c.mesh.rotation.y += dt;
+                });
+
+                if (coop.active && player.group.position.distanceTo(coop.group.position) < 15.0) {
+                    let matchCount = player.collected.filter(color => color === coop.colorHex).length;
+                    
+                    if (matchCount >= 6) {
+                        player.collected = player.collected.filter(color => color !== coop.colorHex);
+                        combos += 3;
+                        score += matchCount * 1000;
+                        ui.combo.innerText = combos;
+                        ui.score.innerText = score;
+                        playWoohoo();
+                        showMessage(`COOP COMBO! ${matchCount} DUMPED!`, "#00ff00");
+                        rebuildStackAndTailVisuals();
+                        coop.active = false; 
+                        
+                        if (!isMultiplayer && combos >= 10) levelUp();
+                    }
+                }
+            }
+
+            // Holes
+            for (let i = entities.holes.length - 1; i >= 0; i--) {
+                const h = entities.holes[i];
+                if (player.group.position.y < 1 && player.group.position.distanceTo(h.group.position) < pRadius + 2.0) {
+                    if (!isInvincible) {
+                        playSplash();
+                        player.velocityY = 40; 
+                        player.isJumping = true;
+                        
+                        if(player.collected.length > 0) {
+                            player.collected.pop();
+                            rebuildStackAndTailVisuals();
+                            showMessage("OUCH! Lost 1", "red");
+                        }
+                    }
+                }
+            }
+
+            // Watermelons
+            for (let i = entities.watermelons.length - 1; i >= 0; i--) {
+                const wm = entities.watermelons[i];
+                wm.group.rotation.y += dt * 5;
+                wm.group.rotation.x += dt * 2;
+                if (player.group.position.distanceTo(wm.group.position) < pRadius + 2.0) {
+                    player.invincibleTimer = 5; 
+                    playWoohoo();
+                    scene.remove(wm.group);
+                    entities.watermelons.splice(i, 1);
+                }
+            }
+
+            // Feathers
+            for (let i = entities.feathers.length - 1; i >= 0; i--) {
+                const f = entities.feathers[i];
+                f.group.rotation.y += dt * 3;
+                f.group.position.y = 2.0 + Math.sin(timeElapsed * 5) * 1.0;
+                if (player.group.position.distanceTo(f.group.position) < pRadius + 2.0) {
+                    player.flyingTimer = 8;
+                    playWoohoo();
+                    scene.remove(f.group);
+                    entities.feathers.splice(i, 1);
+                }
+            }
+
+            // Birds (Sky Enemies)
+            for (let i = entities.birds.length - 1; i >= 0; i--) {
+                const b = entities.birds[i];
+                b.flapTime += dt * 15;
+                b.group.children[1].rotation.z = Math.sin(b.flapTime) * 0.5; // Flap wings
+
+                if (player.group.position.y > 15) {
+                    // Chase player when in the sky
+                    const dx = player.group.position.x - b.group.position.x;
+                    const dz = player.group.position.z - b.group.position.z;
+                    const angleToPlayer = Math.atan2(dx, dz);
+                    b.group.rotation.y = angleToPlayer;
+                    b.group.position.x += Math.sin(angleToPlayer) * (speed + 15) * dt; 
+                    b.group.position.z += Math.cos(angleToPlayer) * (speed + 15) * dt;
+                    b.group.position.y += (player.group.position.y - b.group.position.y) * 2 * dt;
+
+                    if (player.group.position.distanceTo(b.group.position) < pRadius + 3.0) {
+                        if (player.invincibleTimer > 0) { 
+                            scene.remove(b.group);
+                            entities.birds.splice(i, 1);
+                        } else if (player.flyingTimer > 0) {
+                            if (isMultiplayer) { combos = Math.max(0, combos - 1); respawnPlayer(); } else { endGame(false); return; }
+                        }
+                    }
+                } else {
+                    // Circle idle high up in the sky
+                    b.group.position.x += Math.sin(timeElapsed + i) * 10 * dt;
+                    b.group.position.z += Math.cos(timeElapsed + i) * 10 * dt;
+                    b.group.position.y += (30 - b.group.position.y) * 2 * dt;
+                }
+            }
+
+            renderer.render(scene, camera);
+        };
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = animate;
+    </script>
+</body>
+</html>

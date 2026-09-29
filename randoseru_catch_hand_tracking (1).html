@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Randoseru Catch - 16-Bit Hand Tracking</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Google Font for Retro look -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Load MediaPipe dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- Load Tone.js for Audio and Synth -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            color: white;
+            font-family: 'Press Start 2P', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            max-width: 100vw;
+            aspect-ratio: 4/3;
+            background-color: #4cb0f9;
+            box-shadow: 0 0 30px rgba(0,0,0,0.9);
+            border: 6px solid #444;
+            border-radius: 8px;
+            image-rendering: pixelated;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-shadow: 3px 3px 0 #000;
+        }
+
+        .hidden { display: none !important; }
+
+        .btn {
+            pointer-events: auto;
+            background-color: #e52521;
+            color: white;
+            border: 4px solid white;
+            padding: 15px 20px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 16px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0 #000;
+            transition: transform 0.1s, background-color 0.1s;
+        }
+
+        .btn:hover { background-color: #ff3b30; }
+
+        .btn:active {
+            transform: translate(4px, 4px);
+            box-shadow: 0px 0px 0 #000;
+        }
+
+        #webcam-preview {
+            position: absolute;
+            bottom: 90px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            border: 2px solid white;
+            background-color: #000;
+            transform: scaleX(-1);
+            opacity: 0.8;
+            pointer-events: none;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
+        }
+
+        #gesture-status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            color: #fff;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <video id="input_video" class="hidden" playsinline></video>
+        <video id="webcam-preview" playsinline autoplay muted></video>
+
+        <div id="gesture-status">GESTURE: NONE</div>
+
+        <div id="ui-layer">
+            <h1 id="title-text" class="text-4xl text-yellow-300 mb-8 text-center leading-tight">MOM'S<br>RANDOSERU CATCH</h1>
+            
+            <div id="instructions" class="text-xs text-center mb-8 max-w-lg leading-relaxed bg-black/80 p-4 border-2 border-white shadow-lg">
+                <p class="mb-4 text-green-400">HOW TO PLAY (WEBCAM):</p>
+                <p class="mb-2">1. Make a 'Gun' posture (Index out, others curled).</p>
+                <p class="mb-4">2. Drop your thumb to SHOOT.</p>
+                <p class="text-blue-300 mb-2">FALLBACK CONTROLS:</p>
+                <p>Move mouse to aim, Click or SPACEBAR to shoot.</p>
+            </div>
+
+            <button id="start-btn" class="btn">START GAME (ENABLE AUDIO)</button>
+            <p id="loading-text" class="hidden text-yellow-300 mt-4 animate-pulse">LOADING CAMERA & AI...</p>
+            
+            <div id="round-text" class="hidden text-4xl text-white text-center">ROUND 1</div>
+            <div id="game-over-text" class="hidden text-5xl text-red-500 mb-4 animate-bounce">GAME OVER</div>
+            <div id="win-text" class="hidden text-5xl text-green-400 mb-4 animate-bounce">YOU WIN!</div>
+            <button id="restart-btn" class="hidden btn mt-8">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        const uiLayer = document.getElementById('ui-layer');
+        const titleText = document.getElementById('title-text');
+        const instructions = document.getElementById('instructions');
+        const startBtn = document.getElementById('start-btn');
+        const loadingText = document.getElementById('loading-text');
+        const roundText = document.getElementById('round-text');
+        const gameOverText = document.getElementById('game-over-text');
+        const winText = document.getElementById('win-text');
+        const restartBtn = document.getElementById('restart-btn');
+        const videoElement = document.getElementById('input_video');
+        const previewElement = document.getElementById('webcam-preview');
+        const gestureStatus = document.getElementById('gesture-status');
+
+        const WIDTH = 800;
+        const HEIGHT = 600;
+        const FLOOR_Y = 480;
+        const MAX_ROUNDS = 5;
+
+        let aimX = WIDTH / 2;
+        let aimY = HEIGHT / 2;
+        let thumbReady = false; 
+        
+        let gameState = 'START'; 
+        let score = 0;
+        let round = 1;
+        let bagsToSpawn = 0;
+        let bagsCaught = 0;
+        let bagsEscaped = 0;
+        let bagsTotal = 0;
+        let spawnTimer = 0;
+        let transitionTimer = 0;
+        let flashTimer = 0; 
+
+        let kids = [];
+        let bags = [];
+        let particles = []; 
+        let laughingKids = [];
+
+        let audioInitialized = false;
+        let metalOst, bassSynth, drumKick, drumSnare, shootSynth, hitSynth, laughSynth;
+
+        async function initAudio() {
+            if (audioInitialized) return;
+            await Tone.start();
+            
+            // Heavier Distorted Bass for Metal OST
+            const dist = new Tone.Distortion(0.95).toDestination();
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.01, decay: 0.15, sustain: 0.1, release: 0.1 },
+                filter: { Q: 5, type: "lowpass", rolloff: -24 },
+                filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1, baseFrequency: 80, octaves: 4 }
+            }).connect(dist);
+
+            // Drums
+            drumKick = new Tone.MembraneSynth().toDestination();
+            drumSnare = new Tone.NoiseSynth({
+                noise: { type: 'white' },
+                envelope: { attack: 0.005, decay: 0.1, sustain: 0.0 }
+            }).toDestination();
+
+            // Sound Effects
+            shootSynth = new Tone.NoiseSynth({
+                noise: { type: 'pink' },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            }).toDestination();
+
+            hitSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 }
+            }).toDestination();
+
+            // Retro Square-wave Laugh Synth
+            laughSynth = new Tone.Synth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.05 }
+            }).toDestination();
+
+            // Metal OST Loop (Gallop riff)
+            metalOst = new Tone.Sequence((time, note) => {
+                if (note.b) bassSynth.triggerAttackRelease(note.b, "16n", time);
+                if (note.k) drumKick.triggerAttackRelease("C1", "8n", time);
+                if (note.s) drumSnare.triggerAttackRelease("16n", time);
+            }, [
+                {b: "E1", k: true}, {b: "E1"}, {b: "E1", s: true}, {b: "E1"},
+                {b: "G1", k: true}, {b: "E1"}, {b: "A1", s: true}, {b: "E1"}
+            ], "8n");
+
+            Tone.Transport.bpm.value = 180; // Faster tempo
+            audioInitialized = true;
+        }
+
+        function playShootSFX() {
+            if(!audioInitialized) return;
+            shootSynth.triggerAttackRelease("16n");
+            drumKick.triggerAttackRelease("C2", "16n"); 
+        }
+
+        function playHitSFX() {
+            if(!audioInitialized) return;
+            hitSynth.triggerAttackRelease(["C5", "E5", "G5"], "16n");
+        }
+
+        function playLaughSFX() {
+            if(!audioInitialized) return;
+            const now = Tone.now();
+            // Staccato descending retro laugh
+            laughSynth.triggerAttackRelease("E4", "16n", now);
+            laughSynth.triggerAttackRelease("C4", "16n", now + 0.15);
+            laughSynth.triggerAttackRelease("E4", "16n", now + 0.3);
+            laughSynth.triggerAttackRelease("C4", "16n", now + 0.45);
+        }
+
+        const COLORS = {
+            'R': '#D32F2F', 'r': '#F44336', 'd': '#B71C1C', // Reds
+            'K': '#000000', 'W': '#FFFFFF', 'w': '#E0E0E0', // Grayscale
+            'S': '#FFCCBC', 's': '#E64A19', // Skin
+            'B': '#1976D2', 'b': '#0D47A1', // Blues
+            'H': '#795548', 'h': '#3E2723', // Browns
+            'G': '#43b047', 'g': '#1B5E20', 'L': '#8BC34A', // Greens
+            'Y': '#FDD835', // Yellow
+            '.': null
+        };
+
+        const SPRITE_RANDOSERU = [
+            "......KKKK......",
+            ".....KRRRRK.....",
+            "....KRRRRRRK....",
+            "...KRRRRRRRRK...",
+            "..KRRRRRRRRRRK..",
+            ".KRrRrRRRRRRRRK.",
+            ".KRRRRRRRRRRRRK.",
+            ".KRKKRRRRRRKKRK.",
+            ".KRKWKRRRRKWKRK.",
+            ".KRKKRRRRRRKKRK.",
+            ".KRRRRRRRRRRRRK.",
+            ".KRddddddddddRK.",
+            ".KddddddddddddK.",
+            "..KKKKKKKKKKKK..",
+            "................",
+            "................"
+        ];
+
+        const SPRITE_KID = [
+            ".....hhhhh......",
+            "....hHHHHHh.....",
+            "...hHSSSSSSh....",
+            "...hSKSWSKSSh...",
+            "...hSSSSSSSSh...",
+            "....hssssssh....",
+            "....bbbbbbbb....",
+            "...bBBBBBBBBb...",
+            "..bBBBBBBBBBBb..",
+            "..bBBBBBBBBBBb..",
+            "..SBBBBBBBBBBS..",
+            ".S.BBBBBBBBBB.S.",
+            "S..BBBBBBBBBB..S",
+            "...hHh....hHh...",
+            "...hhh....hhh...",
+            "...KKK....KKK..."
+        ];
+
+        const SPRITE_LAUGH = [
+            ".....hhhhh......",
+            "....hHHHHHh.....",
+            "...hHSSSSSSh....",
+            "...hSKSWSKSSh...",
+            "...hSSSSSSSSh...",
+            "....hKKKKKKh....",
+            "....hKWWWWKh....",
+            "....hKKKKKKh....",
+            "....bbbbbbbb....",
+            "...bBBBBBBBBb...",
+            "..bBSBBBBBBBSb..",
+            "..bSSBBBBBBSSb..",
+            "..SSSSBBBBSSSS..",
+            "................",
+            "................",
+            "................"
+        ];
+
+        const SPRITE_CROSSHAIR = [
+            "...KKK...",
+            "..K.W.K..",
+            ".K..W..K.",
+            "K...W...K",
+            "KWW...WWK",
+            "K...W...K",
+            ".K..W..K.",
+            "..K.W.K..",
+            "...KKK..."
+        ];
+
+        function drawSprite(ctx, sprite, x, y, scale) {
+            for (let r = 0; r < sprite.length; r++) {
+                for (let c = 0; c < sprite[r].length; c++) {
+                    const char = sprite[r][c];
+                    if (char !== '.') {
+                        ctx.fillStyle = COLORS[char] || char;
+                        ctx.fillRect(Math.floor(x + c * scale), Math.floor(y + r * scale), scale, scale);
+                    }
+                }
+            }
+        }
+
+        class Kid {
+            constructor() {
+                this.scale = 5;
+                this.width = 16 * this.scale;
+                this.height = 16 * this.scale;
+                this.x = 100 + Math.random() * (WIDTH - 200 - this.width);
+                this.y = FLOOR_Y;
+                this.state = 'RISING'; 
+                this.timer = 0;
+                this.hasThrown = false;
+            }
+            update(dt) {
+                if (this.state === 'RISING') {
+                    this.y -= 300 * dt;
+                    if (this.y <= FLOOR_Y - this.height + 20) {
+                        this.y = FLOOR_Y - this.height + 20;
+                        this.state = 'WAITING';
+                    }
+                } else if (this.state === 'WAITING') {
+                    this.timer += dt;
+                    if (this.timer > 0.2 && !this.hasThrown) {
+                        this.throwBag();
+                        this.hasThrown = true;
+                    }
+                    if (this.timer > 0.6) this.state = 'HIDING';
+                } else if (this.state === 'HIDING') {
+                    this.y += 300 * dt;
+                    if (this.y >= FLOOR_Y) this.state = 'DONE';
+                }
+            }
+            throwBag() {
+                const vx = (Math.random() - 0.5) * (200 + round * 60);
+                const vy = - (600 + Math.random() * 200 + round * 50);
+                bags.push(new Bag(this.x + this.width / 2 - 24, this.y, vx, vy));
+            }
+            draw(ctx) {
+                drawSprite(ctx, SPRITE_KID, this.x, this.y, this.scale);
+            }
+        }
+
+        class LaughingKid {
+            constructor(x) {
+                this.scale = 5;
+                this.width = 16 * this.scale;
+                this.height = 16 * this.scale;
+                this.x = Math.max(50, Math.min(WIDTH - this.width - 50, x - this.width/2));
+                this.y = FLOOR_Y;
+                this.timer = 0;
+                this.state = 'RISING';
+            }
+            update(dt) {
+                if (this.state === 'RISING') {
+                    this.y -= 300 * dt;
+                    if (this.y <= FLOOR_Y - this.height + 20) {
+                        this.y = FLOOR_Y - this.height + 20;
+                        this.state = 'LAUGHING';
+                    }
+                } else if (this.state === 'LAUGHING') {
+                    this.timer += dt;
+                    if (this.timer > 1.0) this.state = 'HIDING';
+                } else if (this.state === 'HIDING') {
+                    this.y += 300 * dt;
+                    if (this.y >= FLOOR_Y) this.state = 'DONE';
+                }
+            }
+            draw(ctx) {
+                // Bobbing animation
+                const bobOffset = (this.state === 'LAUGHING' && Math.floor(this.timer * 10) % 2 === 0) ? -5 : 0;
+                drawSprite(ctx, SPRITE_LAUGH, this.x, this.y + bobOffset, this.scale);
+            }
+        }
+
+        class Bag {
+            constructor(x, y, vx, vy) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.scale = 4;
+                this.width = 16 * this.scale;
+                this.height = 16 * this.scale;
+                this.isCaught = false;
+                this.rotation = 0;
+                this.rotationSpeed = (Math.random() - 0.5) * 15;
+            }
+            update(dt) {
+                this.vy += 900 * dt; // Gravity
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+                this.rotation += this.rotationSpeed * dt;
+
+                if (this.x < 0 || this.x > WIDTH - this.width) {
+                    this.vx *= -1;
+                    this.x = Math.max(0, Math.min(WIDTH - this.width, this.x));
+                }
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                ctx.rotate(this.rotation);
+                drawSprite(ctx, SPRITE_RANDOSERU, -this.width/2, -this.height/2, this.scale);
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.timer = 1.0;
+            }
+            update(dt) {
+                this.y -= 60 * dt;
+                this.timer -= dt;
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#000';
+                ctx.font = '24px "Press Start 2P", monospace';
+                ctx.globalAlpha = Math.max(0, this.timer);
+                ctx.fillText(this.text, this.x + 2, this.y + 2); // Shadow
+                ctx.fillStyle = this.color;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        function drawBackground() {
+            // Reference: image_a39422.png style Duck Hunt background
+            
+            // Sky
+            ctx.fillStyle = '#3cbcfc'; 
+            ctx.fillRect(0, 0, WIDTH, FLOOR_Y);
+
+            // Ground / Dirt layer
+            ctx.fillStyle = '#fc9838'; 
+            ctx.fillRect(0, FLOOR_Y, WIDTH, HEIGHT - FLOOR_Y);
+            
+            // Ground outline separator
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, FLOOR_Y, WIDTH, 4);
+
+            // Back Grass Layer
+            ctx.fillStyle = '#88d800'; 
+            ctx.fillRect(0, FLOOR_Y - 40, WIDTH, 40);
+
+            // Draw pixel tree on the left
+            drawTree(80, FLOOR_Y);
+        }
+
+        function drawTree(x, y) {
+            // Trunk
+            ctx.fillStyle = '#8b5a2b';
+            ctx.fillRect(x + 40, y - 120, 30, 120);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x + 66, y - 120, 4, 120); // Trunk shadow
+            
+            // Chunky Pixel Leaves (Dark green base with black outline effect)
+            ctx.fillStyle = '#00a800';
+            ctx.fillRect(x, y - 160, 110, 80);
+            ctx.fillRect(x + 20, y - 220, 70, 70);
+            ctx.fillRect(x - 20, y - 130, 50, 40);
+            ctx.fillRect(x + 80, y - 150, 40, 50);
+            
+            // Leaf Highlights
+            ctx.fillStyle = '#88d800';
+            ctx.fillRect(x + 10, y - 150, 20, 20);
+            ctx.fillRect(x + 30, y - 210, 20, 20);
+        }
+
+        function drawForegroundBushes() {
+            // Jagged Foreground Grass Blades
+            ctx.fillStyle = '#88d800';
+            for (let i = 0; i < WIDTH; i += 16) {
+                const heightOffset = Math.random() * 15;
+                ctx.fillRect(i, FLOOR_Y - 50 + heightOffset, 8, 50 - heightOffset);
+                ctx.fillStyle = (i % 32 === 0) ? '#00a800' : '#88d800'; // Add some texture
+            }
+            
+            // Bush on the right
+            let bx = 600;
+            let by = FLOOR_Y;
+            ctx.fillStyle = '#00a800';
+            ctx.fillRect(bx, by - 80, 100, 80);
+            ctx.fillRect(bx + 20, by - 100, 60, 20);
+            ctx.fillStyle = '#88d800';
+            ctx.fillRect(bx + 10, by - 70, 20, 20);
+            ctx.fillRect(bx + 70, by - 50, 20, 20);
+        }
+
+        function drawUI() {
+            // Bottom UI black container (Duck Hunt Style)
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, HEIGHT - 100, WIDTH, 100);
+
+            // Ammo / Shot Box
+            ctx.fillStyle = '#000';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(30, HEIGHT - 85, 100, 70);
+            
+            ctx.fillStyle = '#88d800'; // Retro green text
+            ctx.font = '16px "Press Start 2P", monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`R=3`, 40, HEIGHT - 60);
+            
+            ctx.fillStyle = '#3cbcfc'; // Blue text
+            ctx.fillText(`SHOT`, 40, HEIGHT - 30);
+
+            // Hit Tracker Box
+            ctx.strokeRect(150, HEIGHT - 85, 360, 70);
+            ctx.fillStyle = '#88d800';
+            ctx.fillText("HIT", 160, HEIGHT - 45);
+            
+            // Hit icons
+            for(let i=0; i<bagsTotal; i++) {
+                let color = '#fff'; // pending
+                if (i < bagsCaught + bagsEscaped) {
+                    color = (i < bagsCaught) ? '#F44336' : '#fff'; // Red hit, White miss
+                }
+                ctx.fillStyle = color;
+                ctx.fillRect(230 + i * 22, HEIGHT - 60, 16, 16);
+            }
+
+            // Score Box
+            ctx.strokeRect(530, HEIGHT - 85, 240, 70);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`${score.toString().padStart(6, '0')}`, 550, HEIGHT - 55);
+            ctx.fillText(`SCORE`, 630, HEIGHT - 25);
+            
+            // Round indicator overlay
+            ctx.fillStyle = '#88d800';
+            ctx.fillText(`RND ${round}`, WIDTH - 120, 40);
+        }
+
+        let lastTime = 0;
+        function updateGame(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1); 
+            lastTime = timestamp;
+
+            if (flashTimer > 0) flashTimer -= dt;
+
+            if (gameState === 'PLAYING') {
+                if (bagsToSpawn > 0) {
+                    spawnTimer -= dt;
+                    if (spawnTimer <= 0) {
+                        kids.push(new Kid());
+                        bagsToSpawn--;
+                        spawnTimer = 1.8 - (round * 0.2); 
+                    }
+                }
+
+                for (let i = kids.length - 1; i >= 0; i--) {
+                    kids[i].update(dt);
+                    if (kids[i].state === 'DONE') kids.splice(i, 1);
+                }
+
+                for (let i = bags.length - 1; i >= 0; i--) {
+                    bags[i].update(dt);
+                    if (bags[i].y > HEIGHT) {
+                        // Missed bag
+                        laughingKids.push(new LaughingKid(bags[i].x));
+                        playLaughSFX();
+                        bags.splice(i, 1);
+                        bagsEscaped++;
+                    }
+                }
+
+                for (let i = laughingKids.length - 1; i >= 0; i--) {
+                    laughingKids[i].update(dt);
+                    if (laughingKids[i].state === 'DONE') laughingKids.splice(i, 1);
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].update(dt);
+                    if (particles[i].timer <= 0) particles.splice(i, 1);
+                }
+
+                if (bagsToSpawn === 0 && bags.length === 0 && kids.length === 0 && laughingKids.length === 0) {
+                    gameState = 'ROUND_TRANSITION';
+                    transitionTimer = 3.0;
+                    Tone.Transport.stop(); // Pause OST between rounds
+                    
+                    if (bagsCaught >= bagsTotal / 2) {
+                        round++;
+                        roundText.innerText = `ROUND CLEARED!`;
+                        roundText.classList.remove('hidden');
+                        if (round > MAX_ROUNDS) {
+                            setTimeout(() => {
+                                gameState = 'WIN';
+                                roundText.classList.add('hidden');
+                                winText.classList.remove('hidden');
+                                restartBtn.classList.remove('hidden');
+                            }, 2000);
+                        }
+                    } else {
+                        roundText.innerText = `YOU FAILED!`;
+                        roundText.classList.remove('hidden');
+                        setTimeout(() => {
+                            gameState = 'GAME_OVER';
+                            roundText.classList.add('hidden');
+                            gameOverText.classList.remove('hidden');
+                            restartBtn.classList.remove('hidden');
+                        }, 2000);
+                    }
+                }
+
+            } else if (gameState === 'ROUND_TRANSITION') {
+                transitionTimer -= dt;
+                if (transitionTimer <= 0 && round <= MAX_ROUNDS) {
+                    startRound();
+                }
+            }
+
+            drawScene();
+            requestAnimationFrame(updateGame);
+        }
+
+        function triggerShoot() {
+            if (gameState !== 'PLAYING') return;
+            
+            flashTimer = 0.15; // Bright flash
+            playShootSFX();
+
+            const hitRadius = 60; 
+            
+            for (let i = bags.length - 1; i >= 0; i--) {
+                const bag = bags[i];
+                const cx = bag.x + bag.width / 2;
+                const cy = bag.y + bag.height / 2;
+                
+                const dist = Math.hypot(aimX - cx, aimY - cy);
+                if (dist < hitRadius) {
+                    // HIT!
+                    playHitSFX();
+                    const points = 500 + round * 100;
+                    score += points;
+                    bagsCaught++;
+                    particles.push(new Particle(bag.x, bag.y, `${points}`, '#FFFF00'));
+                    bags.splice(i, 1);
+                    break; 
+                }
+            }
+        }
+
+        function drawScene() {
+            if (flashTimer > 0) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            } else {
+                drawBackground();
+                laughingKids.forEach(lk => lk.draw(ctx));
+                kids.forEach(kid => kid.draw(ctx));
+                drawForegroundBushes();
+                bags.forEach(bag => bag.draw(ctx));
+                particles.forEach(p => p.draw(ctx));
+            }
+
+            drawUI();
+
+            if (gameState === 'PLAYING' && flashTimer <= 0) {
+                ctx.save();
+                drawSprite(ctx, SPRITE_CROSSHAIR, aimX - 18, aimY - 18, 4);
+                ctx.restore();
+            }
+        }
+
+        function startRound() {
+            gameState = 'PLAYING';
+            bagsToSpawn = 5 + (round * 2);
+            bagsTotal = bagsToSpawn;
+            bagsCaught = 0;
+            bagsEscaped = 0;
+            spawnTimer = 2.0;
+            kids = [];
+            bags = [];
+            particles = [];
+            laughingKids = [];
+            
+            if (audioInitialized) {
+                Tone.Transport.start();
+                if (metalOst.state !== "started") metalOst.start(0);
+            }
+
+            roundText.innerText = `ROUND ${round}`;
+            roundText.classList.remove('hidden');
+            setTimeout(() => {
+                if(gameState === 'PLAYING') roundText.classList.add('hidden');
+            }, 2000);
+        }
+
+        function restartGame() {
+            score = 0;
+            round = 1;
+            uiLayer.classList.add('pointer-events-none');
+            gameOverText.classList.add('hidden');
+            winText.classList.add('hidden');
+            restartBtn.classList.add('hidden');
+            startRound();
+        }
+
+        function onResults(results) {
+            previewElement.srcObject = videoElement.srcObject;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const wrist = landmarks[0];
+
+                const indexTip = landmarks[8];
+                const indexPip = landmarks[6];
+                const indexMcp = landmarks[5];
+                
+                const middleTip = landmarks[12];
+                const middlePip = landmarks[10];
+                
+                const thumbTip = landmarks[4];
+
+                // Aim using index finger tip
+                aimX = (1 - indexTip.x) * WIDTH;
+                aimY = indexTip.y * HEIGHT;
+
+                // Is gun posture?
+                // Check distance from tip to wrist vs pip to wrist (works from any hand angle)
+                const indexTipDist = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
+                const indexPipDist = Math.hypot(indexPip.x - wrist.x, indexPip.y - wrist.y);
+                const indexExtended = indexTipDist > indexPipDist;
+
+                const middleTipDist = Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y);
+                const middlePipDist = Math.hypot(middlePip.x - wrist.x, middlePip.y - wrist.y);
+                const middleCurled = middleTipDist < middlePipDist;
+
+                const isGun = indexExtended && middleCurled;
+
+                if (isGun) {
+                    // Refined Thumb Tracking based on IMG_2339.jpg & IMG_2340.jpg
+                    // Calculate distance from Thumb Tip (4) to Index Finger Base (5)
+                    const handSize = Math.hypot(wrist.x - indexMcp.x, wrist.y - indexMcp.y);
+                    const thumbDist = Math.hypot(thumbTip.x - indexMcp.x, thumbTip.y - indexMcp.y) / handSize;
+
+                    // Display debug info to help player position hand
+                    gestureStatus.innerText = `GUN POSE | THUMB DIST: ${thumbDist.toFixed(2)}`;
+
+                    if (thumbDist > 0.45) { // Thumb is pointing UP / AWAY
+                        thumbReady = true;
+                        gestureStatus.innerText += " [READY]";
+                        gestureStatus.style.color = "#0f0"; // Green
+                    } else if (thumbDist < 0.25) { // Thumb is dropped DOWN / IN
+                        gestureStatus.innerText += " [FIRE!]";
+                        gestureStatus.style.color = "#f00"; // Red
+                        if (thumbReady) {
+                            triggerShoot();
+                            thumbReady = false; // Prevent rapid continuous firing (white screen bug)
+                        }
+                    } else {
+                        gestureStatus.innerText += " [HOLD]";
+                        gestureStatus.style.color = "#ff0"; // Yellow
+                    }
+                } else {
+                    thumbReady = false;
+                    gestureStatus.innerText = "GESTURE: NONE (MAKE A GUN)";
+                    gestureStatus.style.color = "#fff";
+                }
+            } else {
+                gestureStatus.innerText = "HAND NOT DETECTED";
+                gestureStatus.style.color = "#fff";
+            }
+        }
+
+        async function initCamera() {
+            startBtn.classList.add('hidden');
+            titleText.classList.add('hidden');
+            instructions.classList.add('hidden');
+            loadingText.classList.remove('hidden');
+
+            try {
+                const hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+                
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                
+                hands.onResults(onResults);
+
+                const camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await hands.send({image: videoElement});
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                camera.start()
+                    .then(() => {
+                        setTimeout(() => {
+                            loadingText.classList.add('hidden');
+                            previewElement.classList.remove('hidden');
+                            startRound();
+                            requestAnimationFrame(updateGame);
+                        }, 2000);
+                    })
+                    .catch((error) => {
+                        console.error("Camera Init Error:", error);
+                        fallbackStart("CAMERA FAILED.");
+                    });
+
+            } catch (error) {
+                console.error("Hands Setup Error:", error);
+                fallbackStart("AI SETUP FAILED.");
+            }
+        }
+
+        function fallbackStart(msg) {
+            loadingText.innerText = msg + " USING MOUSE.";
+            setTimeout(() => {
+                loadingText.classList.add('hidden');
+                startRound();
+                requestAnimationFrame(updateGame);
+            }, 2000);
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            aimX = (e.clientX - rect.left) * scaleX;
+            aimY = (e.clientY - rect.top) * scaleY;
+        });
+
+        canvas.addEventListener('mousedown', () => { triggerShoot(); });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                triggerShoot();
+                e.preventDefault();
+            }
+        });
+
+        startBtn.addEventListener('click', async () => {
+            await initAudio();
+            initCamera();
+        });
+
+        restartBtn.addEventListener('click', () => {
+            restartGame();
+        });
+
+    </script>
+</body>
+</html>

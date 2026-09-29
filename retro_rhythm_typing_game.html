@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gyaru Penguin: Rhythm Escape</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #000; font-family: 'Press Start 2P', monospace; user-select: none;
+        }
+        canvas {
+            width: 100vw; height: 100vh; image-rendering: pixelated; display: block;
+        }
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+        }
+        .hud-top {
+            padding: 20px; padding-left: 140px; display: flex; justify-content: space-between;
+            color: #fff; text-shadow: 2px 2px 0px #000; font-size: 16px; pointer-events: auto;
+        }
+        
+        /* Vertical Rhythm Track on Left */
+        .rhythm-container {
+            position: absolute; left: 0; top: 0; width: 120px; height: 100%;
+            background: rgba(0, 0, 50, 0.7); border-right: 4px solid #ff66b2; overflow: hidden;
+        }
+        .target-zone {
+            position: absolute; left: 50%; top: 20%; transform: translate(-50%, -50%);
+            width: 60px; height: 60px; border: 4px solid #fff;
+            box-shadow: 0 0 15px #ff66b2, inset 0 0 15px #ff66b2;
+            border-radius: 8px; box-sizing: border-box; z-index: 10;
+        }
+        .note {
+            position: absolute; left: 50%; transform: translate(-50%, -50%);
+            width: 44px; height: 44px; background: #ff66b2; color: #fff;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 22px; border: 3px solid #fff; border-radius: 8px;
+            box-shadow: 4px 4px 0 #000; transition: background 0.1s, transform 0.1s;
+        }
+        
+        /* Overlays and Text */
+        #screens {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; text-align: center;
+            pointer-events: auto; z-index: 100;
+        }
+        h1 { color: #ff66b2; text-shadow: 4px 4px 0 #005; font-size: 32px; margin-bottom: 20px; line-height: 1.5; }
+        p { font-size: 12px; line-height: 2; max-width: 600px; margin-bottom: 30px; }
+        .btn {
+            background: #ff66b2; color: white; border: 4px solid white; padding: 15px 30px;
+            font-family: 'Press Start 2P', monospace; font-size: 16px; cursor: pointer;
+            box-shadow: 4px 4px 0 #000; transition: transform 0.1s;
+        }
+        .btn:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0 #000; }
+        #feedback {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 32px; font-weight: bold; opacity: 0; text-shadow: 3px 3px 0 #000;
+            pointer-events: none; transition: opacity 0.1s, transform 0.1s; z-index: 50;
+        }
+        #combo-msg {
+            position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 24px; color: #0ff; opacity: 0; text-shadow: 2px 2px 0 #000; transition: opacity 0.3s;
+        }
+        
+        .health-bar { width: 200px; height: 20px; background: #333; border: 2px solid #fff; margin-top: 10px; }
+        .health-fill { width: 100%; height: 100%; background: #0f0; transition: width 0.2s, background-color 0.2s; }
+        .level-text { color: #ff0; text-shadow: 2px 2px 0px #000; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div>
+                SCORE: <span id="score-display">0</span>
+                <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
+            </div>
+            <div class="level-text">LVL: <span id="level-display">1</span> (Keys: <span id="keys-display">0</span>/20)</div>
+            <div>COMBO: <span id="combo-display">0</span></div>
+        </div>
+
+        <div id="feedback">PERFECT</div>
+        <div id="combo-msg">PARA PARA TIME!</div>
+
+        <div class="rhythm-container" id="rhythm-track">
+            <div class="target-zone" id="target-zone"></div>
+        </div>
+    </div>
+
+    <div id="screens">
+        <h1 id="screen-title">GYARU PENGUIN<br>ESCAPE</h1>
+        <p id="screen-desc">
+            Type the letters when they hit the target zone on the left.<br><br>
+            Build combos for Power-Ups and Para-Para routines!<br><br>
+            Escape the Killer Whale through 4 distinct zones.
+        </p>
+        <button class="btn" id="start-btn">START RUN</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        class AudioEngine {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                this.isPlaying = false;
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.3;
+                this.masterGain.connect(this.ctx.destination);
+
+                this.notesQueue = [];
+                this.letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                this.scheduleAheadTime = 3.0; 
+                this.lookahead = 25.0; 
+                this.timerID = null;
+
+                this.nextNoteTime = 0;
+                this.currentBeat = 0;
+                this.nextTypingTime = 0;
+                this.typingNoteId = 0;
+
+                this.currentLevel = 1;
+                this.baseBpm = 80;
+                this.typingBpm = 20; 
+                this.isParaPara = false;
+            }
+
+            setLevel(level) {
+                this.currentLevel = level;
+                // 1: Gospel (Slow), 2: Sertanejo (Mid), 3: Reggae (Mid), 4: Anime (Fast)
+                switch(level) {
+                    case 1: this.baseBpm = 75; break;
+                    case 2: this.baseBpm = 90; break;
+                    case 3: this.baseBpm = 85; break;
+                    case 4: this.baseBpm = 160; break;
+                }
+            }
+
+            playTone(freq, time, dur, type = 'square', gainVal = 0.3) {
+                if(time < this.ctx.currentTime) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, time);
+                gain.gain.setValueAtTime(0, time);
+                gain.gain.linearRampToValueAtTime(gainVal, time + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start(time);
+                osc.stop(time + dur);
+            }
+
+            playKick(time) {
+                if(time < this.ctx.currentTime) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(120, time);
+                osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+                gain.gain.setValueAtTime(1, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start(time);
+                osc.stop(time + 0.5);
+            }
+
+            scheduler() {
+                // Calculate dynamic beat duration based on ParaPara state
+                const currentMusicBpm = this.isParaPara ? this.baseBpm * 1.5 : this.baseBpm;
+                const musicBeatDur = 60 / currentMusicBpm;
+
+                while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
+                    this.scheduleMusic(this.currentBeat, this.nextNoteTime, musicBeatDur);
+                    this.nextNoteTime += musicBeatDur;
+                    this.currentBeat++;
+                }
+
+                const currentTypingBpm = this.isParaPara ? this.typingBpm * 2.5 : this.typingBpm;
+                const typingBeatDur = 60 / currentTypingBpm;
+
+                while (this.nextTypingTime < this.ctx.currentTime + this.scheduleAheadTime) {
+                    this.scheduleTypingNote(this.nextTypingTime);
+                    this.nextTypingTime += typingBeatDur;
+                }
+
+                if (this.isPlaying) {
+                    this.timerID = setTimeout(() => this.scheduler(), this.lookahead);
+                }
+            }
+
+            scheduleMusic(beat, time, dur) {
+                const b4 = beat % 4;
+                const lvl = this.currentLevel;
+
+                if (lvl === 1) { // Gospel (Organ chords, walking bass)
+                    if (b4 === 0 || b4 === 2) this.playKick(time);
+                    const bass = [65.41, 73.42, 82.41, 77.78]; // C, D, E, Eb
+                    this.playTone(bass[b4], time, dur * 0.8, 'triangle', 0.5);
+                    if (b4 === 0 || b4 === 2) {
+                        this.playTone(261.63, time, dur, 'sine', 0.2); // C
+                        this.playTone(329.63, time, dur, 'sine', 0.2); // E
+                        this.playTone(392.00, time, dur, 'sine', 0.2); // G
+                    }
+                } else if (lvl === 2) { // Sertanejo (Acoustic bounce)
+                    if (b4 === 0 || b4 === 1.5 || b4 === 2.5) this.playKick(time);
+                    const bass = [98.00, 98.00, 130.81, 130.81]; // G, C
+                    this.playTone(bass[b4], time, dur * 0.4, 'sine', 0.6);
+                    if (b4 !== 0) this.playTone(392.00, time, dur * 0.2, 'triangle', 0.3);
+                } else if (lvl === 3) { // Reggae (Skank and heavy bass)
+                    if (b4 === 2) this.playKick(time);
+                    const bass = [55.00, 55.00, 73.42, 65.41]; // Low A, D, C
+                    this.playTone(bass[b4], time, dur * 0.7, 'sine', 0.7);
+                    if (b4 === 1 || b4 === 3) {
+                        this.playTone(440.00, time, dur * 0.15, 'square', 0.1); // Skank
+                        this.playTone(523.25, time, dur * 0.15, 'square', 0.1);
+                    }
+                } else { // Anime (Fast arpeggios)
+                    this.playKick(time);
+                    const bass = [87.31, 87.31, 98.00, 110.00]; // F, G, A
+                    this.playTone(bass[b4], time, dur * 0.3, 'sawtooth', 0.4);
+                    this.playTone(bass[b4], time + dur/2, dur * 0.3, 'sawtooth', 0.4);
+                    const arp = [349.23, 440.00, 523.25, 698.46];
+                    for(let i=0; i<4; i++){
+                        this.playTone(arp[(beat+i)%4], time + (i*dur/4), dur*0.2, 'square', 0.15);
+                    }
+                }
+            }
+
+            scheduleTypingNote(time) {
+                const letter = this.letters.charAt(Math.floor(Math.random() * this.letters.length));
+                this.notesQueue.push({ id: this.typingNoteId++, letter: letter, time: time, hit: false, missed: false });
+            }
+
+            start() {
+                if(this.ctx.state === 'suspended') this.ctx.resume();
+                this.isPlaying = true;
+                this.currentBeat = 0;
+                this.nextNoteTime = this.ctx.currentTime + 0.5; 
+                this.nextTypingTime = this.ctx.currentTime + 2.0; 
+                this.typingNoteId = 0;
+                this.notesQueue = [];
+                this.scheduler();
+            }
+
+            stop() {
+                this.isPlaying = false;
+                clearTimeout(this.timerID);
+            }
+
+            playSFX(type) {
+                const time = this.ctx.currentTime;
+                if (type === 'hit') {
+                    this.playTone(880, time, 0.1, 'sine', 0.4);
+                    this.playTone(1760, time + 0.05, 0.1, 'sine', 0.4);
+                } else if (type === 'miss') {
+                    this.playTone(150, time, 0.3, 'sawtooth', 0.5);
+                    this.playTone(100, time + 0.1, 0.3, 'sawtooth', 0.5);
+                } else if (type === 'shiny') {
+                    this.playTone(1046.50, time, 0.1, 'triangle', 0.5);
+                    this.playTone(1318.51, time+0.1, 0.2, 'triangle', 0.5);
+                }
+            }
+        }
+
+        class GraphicsEngine {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+                // Shift camera right to accommodate the UI rhythm bar
+                this.camera.position.set(4, 5, 25); 
+                
+                this.renderer = new THREE.WebGLRenderer({ antialias: false });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(0.3); // Chunky PS1
+                document.getElementById('game-container').appendChild(this.renderer.domElement);
+
+                const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+                this.scene.add(ambient);
+                const dirLight = new THREE.DirectionalLight(0xaaccff, 1.2);
+                dirLight.position.set(10, 20, 10);
+                this.scene.add(dirLight);
+
+                this.scenery = [];
+                this.initModels();
+                this.changeLevel(1); 
+                
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+
+            initModels() {
+                // PENGUIN - GYARU STYLE!
+                this.penguin = new THREE.Group();
+                const matTan = new THREE.MeshLambertMaterial({ color: 0xd2b48c }); // Deep Tan
+                const matWhite = new THREE.MeshLambertMaterial({ color: 0xffffff });
+                const matBlack = new THREE.MeshLambertMaterial({ color: 0x111111 });
+                const matOrange = new THREE.MeshLambertMaterial({ color: 0xff8800 });
+                const matBlonde = new THREE.MeshLambertMaterial({ color: 0xffeebb });
+
+                // Body
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 1.5), matTan);
+                body.position.y = 1.5;
+                this.penguin.add(body);
+                // Belly
+                const belly = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.5, 0.5), matWhite);
+                belly.position.set(0, 1.3, 0.8);
+                this.penguin.add(belly);
+
+                // Ganguro Makeup (White circles behind eyes)
+                const makeupL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.1), matWhite);
+                makeupL.position.set(-0.5, 2.5, 0.82);
+                const makeupR = makeupL.clone();
+                makeupR.position.set(0.5, 2.5, 0.82);
+                this.penguin.add(makeupL, makeupR);
+
+                // Eyes
+                const pupL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), matBlack);
+                pupL.position.set(-0.5, 2.5, 0.9);
+                const pupR = pupL.clone();
+                pupR.position.set(0.5, 2.5, 0.9);
+                this.penguin.add(pupL, pupR);
+
+                // Blonde Twintails
+                const tailGeo = new THREE.ConeGeometry(0.5, 2, 4);
+                const tailL = new THREE.Mesh(tailGeo, matBlonde);
+                tailL.position.set(-1.2, 3.2, 0); tailL.rotation.z = 0.5;
+                const tailR = new THREE.Mesh(tailGeo, matBlonde);
+                tailR.position.set(1.2, 3.2, 0); tailR.rotation.z = -0.5;
+                this.penguin.add(tailL, tailR);
+
+                // Beak
+                const beak = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 4), matOrange);
+                beak.rotation.x = Math.PI / 2; beak.position.set(0, 2.2, 1.2);
+                this.penguin.add(beak);
+
+                // Wings
+                const wingGeo = new THREE.BoxGeometry(0.5, 2, 1);
+                this.wingL = new THREE.Mesh(wingGeo, matTan);
+                this.wingL.position.set(-1.25, 1.5, 0); this.wingL.rotation.z = 0.2;
+                this.wingR = new THREE.Mesh(wingGeo, matTan);
+                this.wingR.position.set(1.25, 1.5, 0); this.wingR.rotation.z = -0.2;
+                this.penguin.add(this.wingL, this.wingR);
+
+                // Legs & White Baggy Warmers
+                const warmerGeo = new THREE.BoxGeometry(1, 1, 1.2);
+                const warmerL = new THREE.Mesh(warmerGeo, matWhite);
+                warmerL.position.set(-0.6, 0.5, 0);
+                const warmerR = new THREE.Mesh(warmerGeo, matWhite);
+                warmerR.position.set(0.6, 0.5, 0);
+                this.penguin.add(warmerL, warmerR);
+
+                const footGeo = new THREE.BoxGeometry(0.8, 0.3, 1.2);
+                this.footL = new THREE.Mesh(footGeo, matOrange);
+                this.footL.position.set(-0.6, 0.15, 0.5);
+                this.footR = new THREE.Mesh(footGeo, matOrange);
+                this.footR.position.set(0.6, 0.15, 0.5);
+                this.penguin.add(this.footL, this.footR);
+
+                this.penguin.position.z = 10;
+                this.penguin.position.x = 2; // Offset right
+                this.scene.add(this.penguin);
+
+                // WHALE
+                this.whale = new THREE.Group();
+                const wBody = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 8), matBlack);
+                wBody.position.y = 2; this.whale.add(wBody);
+                const patchL = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), matWhite);
+                patchL.position.set(-2.1, 2, 2);
+                const patchR = patchL.clone(); patchR.position.set(2.1, 2, 2);
+                this.whale.add(patchL, patchR);
+                const bellyW = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1, 7), matWhite);
+                bellyW.position.set(0, 0.5, 0); this.whale.add(bellyW);
+                const dorsal = new THREE.Mesh(new THREE.ConeGeometry(1, 3, 4), matBlack);
+                dorsal.position.set(0, 5, 0); this.whale.add(dorsal);
+
+                this.jaw = new THREE.Group();
+                const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 3), matBlack);
+                lowerJaw.position.set(0, -0.5, 1.5); this.jaw.add(lowerJaw);
+                const teeth = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 2.8), matWhite);
+                teeth.position.set(0, 0.1, 1.5); this.jaw.add(teeth);
+                this.jaw.position.set(0, 1.5, 4); this.whale.add(this.jaw);
+
+                this.whale.position.set(2, -1, -15);
+                this.scene.add(this.whale);
+
+                // GROUND
+                this.groundMat = new THREE.MeshLambertMaterial({ color: 0x001133 });
+                this.ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 300, 10, 10), this.groundMat);
+                this.ground.rotation.x = -Math.PI / 2;
+                this.ground.position.y = -1;
+                this.scene.add(this.ground);
+            }
+
+            changeLevel(level) {
+                this.scenery.forEach(obj => this.scene.remove(obj));
+                this.scenery = [];
+                this.whale.scale.set(1 + level*0.2, 1 + level*0.2, 1 + level*0.2);
+
+                let bgColor, groundColor, createObj;
+                switch(level) {
+                    case 1: // Gospel/Sky
+                        bgColor = 0x88ccff; groundColor = 0xffffff;
+                        createObj = () => new THREE.Mesh(new THREE.BoxGeometry(5,3,5), new THREE.MeshLambertMaterial({color:0xffffff}));
+                        break;
+                    case 2: // Sertanejo/Farm
+                        bgColor = 0x87CEEB; groundColor = 0x228B22;
+                        createObj = () => new THREE.Mesh(new THREE.BoxGeometry(1.5,5,1.5), new THREE.MeshLambertMaterial({color:0x8B4513})); // Fence/Trees
+                        break;
+                    case 3: // Reggae/Beach
+                        bgColor = 0x00BFFF; groundColor = 0xF4A460;
+                        createObj = () => new THREE.Mesh(new THREE.BoxGeometry(2,8,2), new THREE.MeshLambertMaterial({color:0x2E8B57})); // Palms
+                        break;
+                    default: // Anime/Cyberpunk
+                        bgColor = 0x110022; groundColor = 0x000000;
+                        createObj = () => new THREE.Mesh(new THREE.BoxGeometry(4, 20, 4), new THREE.MeshLambertMaterial({color: Math.random()>0.5?0xff00ff:0x00ffff, wireframe:true}));
+                        break;
+                }
+
+                this.scene.background = new THREE.Color(bgColor);
+                this.scene.fog = new THREE.Fog(bgColor, 20, 60);
+                this.groundMat.color.setHex(groundColor);
+
+                for(let i=0; i<30; i++) {
+                    const mesh = createObj();
+                    mesh.position.set((Math.random() - 0.5)*60, -0.5, (Math.random() - 0.5)*100);
+                    this.scene.add(mesh);
+                    this.scenery.push(mesh);
+                }
+            }
+
+            animateModels(time, isStumbling, whaleDanger, timeSinceHit, isParaPara) {
+                const speed = isStumbling ? 10 : (isParaPara ? 40 : 25);
+                this.scenery.forEach(obj => {
+                    obj.position.z += speed * 0.016;
+                    if(obj.position.z > 30) { obj.position.z -= 100; obj.position.x = (Math.random() - 0.5) * 60; }
+                });
+
+                // Penguin Animations
+                this.penguin.rotation.set(0,0,0);
+                let pY = 0;
+
+                if (isParaPara) {
+                    // Para Para Float and Dance!
+                    pY = 4 + Math.sin(time*5)*1;
+                    this.wingL.rotation.z = 2 + Math.sin(time*10)*1;
+                    this.wingR.rotation.z = -2 - Math.sin(time*10)*1;
+                    this.penguin.rotation.y = Math.sin(time*3)*0.5;
+                } else if (timeSinceHit < 0.3) {
+                    // Small jump on hit
+                    pY = Math.sin((timeSinceHit/0.3)*Math.PI)*1.5;
+                    this.penguin.rotation.y = (timeSinceHit/0.3)*Math.PI*2; // spin
+                    this.wingL.rotation.z = 0.2; this.wingR.rotation.z = -0.2;
+                } else {
+                    // Normal waddle
+                    const waddle = isStumbling ? 0.4 : 0.15;
+                    this.penguin.rotation.z = Math.sin(time * 10) * waddle;
+                    pY = Math.abs(Math.sin(time * 20)) * waddle;
+                    this.wingL.rotation.x = Math.sin(time * 10) * 0.5;
+                    this.wingR.rotation.x = Math.sin(time * 10 + Math.PI) * 0.5;
+                }
+                this.penguin.position.y = pY;
+
+                // Whale Logic
+                const whaleZTarget = -15 + (whaleDanger * 23); 
+                this.whale.position.z += (whaleZTarget - this.whale.position.z) * 0.05;
+                
+                if (isParaPara) {
+                    this.whale.position.y = 3 + Math.sin(time*5)*1;
+                    this.whale.rotation.z = Math.sin(time*5)*0.3;
+                    this.jaw.rotation.x = 0;
+                } else {
+                    this.whale.position.y = -1 + Math.sin(time * 3) * 1;
+                    this.whale.rotation.z = 0;
+                    this.jaw.rotation.x = Math.max(0, Math.sin(time * 8)) * 0.5;
+                }
+                
+                // Camera Follow
+                const targetZ = isParaPara ? 15 : 25 - (whaleDanger * 10);
+                this.camera.position.z += (targetZ - this.camera.position.z) * 0.05;
+                this.camera.position.y += (5 + pY*0.5 - this.camera.position.y) * 0.1;
+                // Look slightly right at the penguin
+                this.camera.lookAt(2, this.penguin.position.y + 1, this.penguin.position.z - 8);
+
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.audio = new AudioEngine();
+                this.gfx = new GraphicsEngine();
+                
+                // State
+                this.score = 0;
+                this.combo = 0;
+                this.totalHits = 0;
+                this.levelHits = 0; // max 20 per level
+                this.currentLevel = 1;
+                this.baseVisualSpeed = 150; // px/sec
+                this.currentVisualSpeed = 150;
+                
+                this.whaleDanger = 0; 
+                this.isGameOver = false;
+                this.lastStumbleTime = 0;
+                this.lastHitTime = -999;
+                
+                this.paraParaTimer = 0;
+                this.isParaPara = false;
+
+                // DOM
+                this.scoreEl = document.getElementById('score-display');
+                this.comboEl = document.getElementById('combo-display');
+                this.levelEl = document.getElementById('level-display');
+                this.keysEl = document.getElementById('keys-display');
+                this.healthFill = document.getElementById('health-fill');
+                this.trackEl = document.getElementById('rhythm-track');
+                this.screensEl = document.getElementById('screens');
+                
+                this.hitWindow = 0.25; // Forgiving hit window
+                
+                document.getElementById('start-btn').addEventListener('click', () => this.startGame());
+                window.addEventListener('keydown', (e) => this.handleInput(e));
+
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            startGame() {
+                this.screensEl.classList.add('hidden');
+                this.score = 0; this.combo = 0; this.totalHits = 0; this.levelHits = 0;
+                this.currentLevel = 1; this.whaleDanger = 0; this.isGameOver = false;
+                this.isParaPara = false;
+                
+                this.audio.typingBpm = 20; // Relaxed start pace
+                this.currentVisualSpeed = this.baseVisualSpeed;
+                
+                this.audio.setLevel(1);
+                this.gfx.changeLevel(1);
+                this.updateHUD();
+                
+                document.querySelectorAll('.note').forEach(e => e.remove());
+                this.audio.start();
+            }
+
+            endGame(win = false) {
+                this.isGameOver = true;
+                this.audio.stop();
+                this.screensEl.classList.remove('hidden');
+                const title = document.getElementById('screen-title');
+                if (win) {
+                    title.innerHTML = `ESCAPED!<br><span style="font-size:20px; color:#0f0;">Score: ${this.score}</span>`;
+                } else {
+                    title.innerHTML = `EATEN!<br><span style="font-size:20px; color:#fff;">Score: ${this.score}</span>`;
+                }
+                document.getElementById('start-btn').innerText = "RETRY";
+            }
+
+            handleInput(e) {
+                if (this.isGameOver || !this.audio.isPlaying) return;
+                const key = e.key.toUpperCase();
+                if (!/^[A-Z]$/.test(key)) return; 
+
+                const currentTime = this.audio.ctx.currentTime;
+                // Find all notes created but not yet hit
+                let closestNote = null;
+                let minDiff = Infinity;
+                
+                // Visual nodes stored in DOM, mapping back to data via ID
+                const DOMNotes = document.querySelectorAll('.note');
+                let foundMatch = false;
+
+                for(let el of DOMNotes) {
+                    const noteId = parseInt(el.id.split('-')[1]);
+                    const noteData = this.audio.notesQueue.find(n => n.id === noteId);
+                    if(noteData && !noteData.hit && !noteData.missed) {
+                        const diff = Math.abs(currentTime - noteData.time);
+                        if (diff < this.hitWindow && noteData.letter === key) {
+                            this.hit(noteData, el, diff);
+                            foundMatch = true;
+                            break; // only hit one
+                        }
+                    }
+                }
+                
+                if(!foundMatch) {
+                    // Mashed wrong key or out of time
+                    this.combo = 0;
+                    if(this.isParaPara) this.endParaPara();
+                    this.updateHUD();
+                }
+            }
+
+            hit(note, element, diff) {
+                note.hit = true;
+                element.style.background = '#0f0';
+                element.style.transform = 'translate(-50%, -50%) scale(1.5)';
+                element.style.opacity = 0;
+                setTimeout(() => element.remove(), 200);
+                
+                this.combo++;
+                this.totalHits++;
+                this.levelHits++;
+                this.lastHitTime = performance.now() / 1000;
+                
+                // Speed up slightly on hit (dynamic pacing)
+                this.audio.typingBpm = Math.min(60, 20 + (this.totalHits * 0.5));
+                this.currentVisualSpeed = Math.min(350, this.baseVisualSpeed + (this.totalHits * 1.5));
+
+                let points = 10;
+                if (diff < this.hitWindow * 0.3) {
+                    this.showText("PERFECT", "#0f0", 'feedback');
+                    points = 20;
+                    this.whaleDanger = Math.max(0, this.whaleDanger - 0.05); 
+                } else {
+                    this.showText("GOOD", "#ff0", 'feedback');
+                    this.whaleDanger = Math.max(0, this.whaleDanger - 0.02);
+                }
+                
+                this.score += points * (1 + Math.floor(this.combo / 10));
+                this.audio.playSFX('hit');
+
+                // Logic checks
+                if (this.combo > 0 && this.combo % 10 === 0) {
+                    this.startParaPara();
+                } else if (this.combo > 0 && this.combo % 5 === 0 && !this.isParaPara) {
+                    this.showText("SHINY!", "#0ff", 'combo-msg');
+                    this.audio.playSFX('shiny');
+                    this.score += 50;
+                }
+
+                this.updateHUD();
+                
+                if (this.levelHits >= 20) {
+                    if (this.currentLevel === 4) {
+                        this.endGame(true); // Win!
+                    } else {
+                        this.levelUp();
+                    }
+                }
+            }
+
+            miss(note, element) {
+                if(note.missed) return;
+                note.missed = true;
+                element.style.background = '#f00';
+                element.style.opacity = 0.5;
+                
+                this.audio.playSFX('miss');
+                this.combo = 0;
+                this.whaleDanger += 0.1; 
+                this.lastStumbleTime = performance.now() / 1000;
+                
+                // Penalty: Slow down slightly to recover rhythm
+                this.audio.typingBpm = Math.max(20, this.audio.typingBpm - 2);
+                this.currentVisualSpeed = Math.max(150, this.currentVisualSpeed - 10);
+
+                if(this.isParaPara) this.endParaPara();
+                
+                this.showText("MISS", "#f00", 'feedback');
+                this.updateHUD();
+
+                if (this.whaleDanger >= 1.0) {
+                    this.endGame(false);
+                }
+            }
+
+            startParaPara() {
+                this.isParaPara = true;
+                this.audio.isParaPara = true;
+                this.paraParaTimer = performance.now() / 1000 + 6; // lasts 6 seconds
+                this.showText("PARA PARA!", "#f0f", 'combo-msg');
+                this.audio.playSFX('shiny');
+            }
+
+            endParaPara() {
+                this.isParaPara = false;
+                this.audio.isParaPara = false;
+            }
+
+            levelUp() {
+                this.currentLevel++;
+                this.levelHits = 0;
+                this.gfx.changeLevel(this.currentLevel);
+                this.audio.setLevel(this.currentLevel);
+                this.showText(`LEVEL ${this.currentLevel}!`, "#ff0", 'combo-msg');
+                this.updateHUD();
+            }
+
+            showText(text, color, id) {
+                const el = document.getElementById(id);
+                el.innerText = text; el.style.color = color;
+                el.style.opacity = 1; el.style.transform = `translate(-50%, -50%) scale(1.2)`;
+                setTimeout(() => {
+                    el.style.opacity = 0; el.style.transform = `translate(-50%, -50%) scale(1)`;
+                }, 500);
+            }
+
+            updateHUD() {
+                this.scoreEl.innerText = this.score;
+                this.comboEl.innerText = this.combo;
+                this.levelEl.innerText = this.currentLevel;
+                this.keysEl.innerText = this.levelHits;
+                
+                const hp = (1 - this.whaleDanger) * 100;
+                this.healthFill.style.width = `${hp}%`;
+                this.healthFill.style.backgroundColor = hp > 60 ? '#0f0' : (hp > 30 ? '#ff0' : '#f00');
+            }
+
+            loop(timeRaw) {
+                requestAnimationFrame((t) => this.loop(t));
+                const time = timeRaw / 1000;
+
+                if (!this.isGameOver && this.audio.isPlaying) {
+                    const ctxTime = this.audio.ctx.currentTime;
+                    const targetY = window.innerHeight * 0.2; 
+                    
+                    // Create visual elements for new notes in queue
+                    this.audio.notesQueue.forEach(note => {
+                        if(!document.getElementById('note-'+note.id)) {
+                            const el = document.createElement('div');
+                            el.className = 'note'; el.innerText = note.letter;
+                            el.id = 'note-' + note.id;
+                            this.trackEl.appendChild(el);
+                        }
+                    });
+
+                    // Update positions of existing notes
+                    document.querySelectorAll('.note').forEach(el => {
+                        const noteId = parseInt(el.id.split('-')[1]);
+                        const note = this.audio.notesQueue.find(n => n.id === noteId);
+                        
+                        if(note && !note.hit) {
+                            const timeDiff = note.time - ctxTime;
+                            const yPos = targetY + (timeDiff * this.currentVisualSpeed); 
+                            el.style.top = `${yPos}px`;
+
+                            if (timeDiff < -this.hitWindow && !note.missed) {
+                                this.miss(note, el);
+                            }
+                            if (timeDiff < -1) {
+                                el.remove(); // Cleanup old DOM
+                            }
+                        }
+                    });
+
+                    // ParaPara Timeout
+                    if (this.isParaPara && time > this.paraParaTimer) {
+                        this.endParaPara();
+                    }
+
+                    const isStumbling = (time - this.lastStumbleTime) < 0.5;
+                    const timeSinceHit = time - this.lastHitTime;
+                    this.gfx.animateModels(time, isStumbling, this.whaleDanger, timeSinceHit, this.isParaPara);
+                } else if (!this.isGameOver) {
+                    this.gfx.animateModels(time, false, 0, 999, false);
+                }
+            }
+        }
+
+        window.onload = () => { new Game(); };
+    </script>
+</body>
+</html>

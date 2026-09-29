@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starry Cinnamoroll Battle Royale</title>
+    <!-- Import Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Import Tone.js for Audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a4a76;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Quicksand', 'Comic Sans MS', cursive, sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .stat-box {
+            background: rgba(25, 74, 118, 0.85);
+            padding: 12px 30px;
+            border-radius: 20px;
+            border: 3px solid #FFD700;
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+        }
+
+        #powerup-alert {
+            position: absolute;
+            top: 15%;
+            width: 100%;
+            text-align: center;
+            font-size: 3.5rem;
+            color: #FFD700;
+            font-weight: bold;
+            text-shadow: 0 0 20px #ffffff, 2px 2px 5px #1a4a76;
+            display: none;
+            z-index: 15;
+            pointer-events: none;
+            animation: bounce 0.6s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0) scale(1); }
+            to { transform: translateY(-15px) scale(1.05); }
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 74, 118, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            text-align: center;
+            backdrop-filter: blur(8px);
+        }
+
+        #game-over-screen {
+            z-index: 20;
+            display: none;
+        }
+
+        h1 {
+            font-size: 5rem;
+            margin-bottom: 10px;
+            color: #FFD700;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+        }
+
+        button {
+            padding: 20px 50px;
+            font-size: 1.8rem;
+            background-color: #ffffff;
+            color: #1a4a76;
+            border: 4px solid #FFD700;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            font-weight: bold;
+            pointer-events: auto;
+            font-family: inherit;
+        }
+
+        button:hover {
+            background-color: #FFD700;
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+        }
+        
+        #controls-info {
+             position: absolute;
+             bottom: 20px;
+             width: 100%;
+             text-align: center;
+             color: #fff;
+             font-size: 1.1rem;
+             font-weight: bold;
+             pointer-events: none;
+             text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
+             z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="stat-box" id="enemies-remaining">Enemies: 50</div>
+    </div>
+
+    <div id="powerup-alert">CINNAMOROLL POWER!</div>
+
+    <div id="start-screen">
+        <h1>Sanrio Royale</h1>
+        <p style="font-size: 1.8rem; color: #fff; text-shadow: 1px 1px 4px #000; margin-bottom: 30px;">Last One Standing Wins!</p>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+            <button class="diff-btn" data-diff="easy" style="border-color: #55aaff;">Easy Mode<br><span style="font-size:1rem; font-weight:normal;">Low Bounce</span></button>
+            <button class="diff-btn" data-diff="medium" style="border-color: #FFD700;">Medium Mode<br><span style="font-size:1rem; font-weight:normal;">Normal Bounce</span></button>
+            <button class="diff-btn" data-diff="hard" style="border-color: #ffb6c1;">Hard Mode<br><span style="font-size:1rem; font-weight:normal;">Springy Chaos!</span></button>
+        </div>
+    </div>
+
+    <div id="game-over-screen">
+        <h1 id="end-message">Game Over</h1>
+        <p id="end-sub-message" style="margin-bottom: 40px; font-size: 1.8rem; color: #fff; text-shadow: 1px 1px 4px #000;"></p>
+        <button id="restart-btn">Play Again</button>
+    </div>
+    
+    <div id="controls-info">Move: Arrow Keys | Dash: Spacebar | EXTREME Dash: Double Tap Spacebar!</div>
+</div>
+
+<script>
+    // --- Configuration & Constants ---
+    const STADIUM_RADIUS = 900; // Much larger stage (increased from 600)
+    const BLADE_RADIUS = 14;
+    const PLAYER_SPEED = 0.65;
+    const ENEMY_SPEED = 0.25;
+    const DASH_MULTIPLIER = 4;
+    const EXTREME_DASH_MULTIPLIER = 9;
+    const DASH_DURATION = 15; 
+    const DASH_COOLDOWN = 60;
+    
+    const FRICTION = 0.98;
+    const FLYING_FRICTION = 0.995; // Less friction when flying
+    let restitution = 1.6; // Global bounce factor (modified by difficulty)
+    const MAX_VELOCITY = 22;
+    const NUM_ENEMIES = 50;
+
+    // --- Global State ---
+    let isGameOver = false;
+    let musicStarted = false;
+    let animationId;
+    let scene, camera, renderer;
+    let allBlades = [];
+    let particles = [];
+    let player;
+    let powerupItem = null; // Cinnamoroll or Feather on the field
+    let snake = null; // The sweeping snake hazard
+    let activeHoles = []; // Random holes that appear on the floor
+
+    let lastSpaceTime = 0;
+
+    // UI Elements
+    const enemiesRemainingEl = document.getElementById('enemies-remaining');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const startScreen = document.getElementById('start-screen');
+    const endMessageEl = document.getElementById('end-message');
+    const endSubMessageEl = document.getElementById('end-sub-message');
+    const restartBtn = document.getElementById('restart-btn');
+    const diffBtns = document.querySelectorAll('.diff-btn');
+    const powerupAlertEl = document.getElementById('powerup-alert');
+
+    let hitSynth; // Sound effect synth
+
+    // Input state
+    const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, Space: false };
+
+    window.addEventListener('keydown', (e) => {
+        if (keys.hasOwnProperty(e.code) || e.code === 'Space') {
+            if(e.code === 'Space' && !keys.Space) {
+                const now = Date.now();
+                if (now - lastSpaceTime < 300) {
+                    player.triggerDash(true); // Extreme dash
+                    lastSpaceTime = 0;
+                } else {
+                    player.triggerDash(false); // Normal dash
+                    lastSpaceTime = now;
+                }
+            }
+            if(e.code === 'Space') keys.Space = true;
+            else keys[e.code] = true;
+            e.preventDefault();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (keys.hasOwnProperty(e.code) || e.code === 'Space') {
+            if(e.code === 'Space') keys.Space = false;
+            else keys[e.code] = false;
+        }
+    });
+
+    restartBtn.addEventListener('click', initGame);
+
+    diffBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const diff = e.currentTarget.getAttribute('data-diff');
+            if (diff === 'easy') restitution = 1.0;
+            else if (diff === 'medium') restitution = 1.8;
+            else if (diff === 'hard') restitution = 3.5; // EXTREME bounce
+
+            startScreen.style.display = 'none';
+            await initAudio();
+            initGame();
+        });
+    });
+
+    function showAlert(text, color) {
+        powerupAlertEl.innerText = text;
+        powerupAlertEl.style.color = color;
+        powerupAlertEl.style.display = 'block';
+        setTimeout(() => { powerupAlertEl.style.display = 'none'; }, 2500);
+    }
+
+    // --- Audio Setup (Minimalistic Ambient) ---
+    async function initAudio() {
+        if (musicStarted) return;
+        await Tone.start();
+        musicStarted = true;
+
+        // Reverb and Delay to create a huge, empty starry space
+        const reverb = new Tone.Reverb({ decay: 5, wet: 0.7 }).toDestination();
+        const delay = new Tone.FeedbackDelay("8n.", 0.5).connect(reverb);
+
+        // Deep, soft sub-bass heartbeat
+        const subBass = new Tone.Synth({
+            oscillator: { type: 'sine' },
+            envelope: { attack: 1, decay: 1, sustain: 0.8, release: 3 }
+        }).toDestination();
+        subBass.volume.value = -5;
+
+        // Gentle, glassy bell pluck
+        const pluck = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.01, decay: 0.5, sustain: 0, release: 2 }
+        }).connect(delay);
+        pluck.volume.value = -12;
+
+        // Minimalist Bassline: just hitting root notes very slowly
+        const bassNotes = ['C2', 'G1', 'A1', 'F1'];
+        let measure = 0;
+        Tone.Transport.scheduleRepeat((time) => {
+            subBass.triggerAttackRelease(bassNotes[measure % 4], '1m', time);
+            measure++;
+        }, '2m'); // Changes every 2 measures for a slow, hypnotic feel
+
+        // Sparse Pentatonic Melody (Floating Starry Vibe)
+        const melody = [
+            { time: "0:0:0", note: "E4" },
+            { time: "0:2:0", note: "G4" },
+            { time: "1:0:0", note: "C5" },
+            { time: "2:1:0", note: "D5" },
+            { time: "3:0:0", note: "A4" },
+        ];
+
+        const melodyPart = new Tone.Part((time, value) => {
+            pluck.triggerAttackRelease(value.note, "8n", time);
+        }, melody).start(0);
+        
+        melodyPart.loop = true;
+        melodyPart.loopEnd = "4m"; // Loops every 4 measures with plenty of silence
+
+        Tone.Transport.bpm.value = 85; // Relaxed, slow floating tempo
+        Tone.Transport.start();
+
+        // Cute collision sound effect (FM synth for a metallic "clack")
+        hitSynth = new Tone.PolySynth(Tone.FMSynth, {
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 },
+            harmonicity: 3,
+            modulationIndex: 5
+        }).toDestination();
+        hitSynth.volume.value = -12;
+    }
+
+    // --- 3D Setup & Helpers ---
+    function initThreeJS() {
+        const canvas = document.getElementById('gameCanvas');
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setClearColor(0x153A61); // Soft starry night blue
+
+        scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x153A61, 0.001);
+
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 4000);
+        camera.position.set(0, 700, 800);
+        camera.lookAt(0, 0, 0);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffedd9, 0.8);
+        dirLight.position.set(200, 500, 200);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.left = -800;
+        dirLight.shadow.camera.right = 800;
+        dirLight.shadow.camera.top = 800;
+        dirLight.shadow.camera.bottom = -800;
+        dirLight.shadow.camera.far = 2000;
+        scene.add(dirLight);
+
+        // Starry Sky Particles
+        const starsGeo = new THREE.BufferGeometry();
+        const starsCount = 2000;
+        const posArray = new Float32Array(starsCount * 3);
+        for(let i=0; i < starsCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 3500;
+        }
+        starsGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starsMat = new THREE.PointsMaterial({ size: 3, color: 0xFFD700, transparent: true, opacity: 0.8 });
+        const starMesh = new THREE.Points(starsGeo, starsMat);
+        scene.add(starMesh);
+
+        // Build Beaver Dam Stadium
+        const damGeo = new THREE.CylinderGeometry(STADIUM_RADIUS, STADIUM_RADIUS + 40, 40, 64);
+        const damMat = new THREE.MeshStandardMaterial({ 
+            color: 0x8b6a4b, // Soft pastel wood brown
+            roughness: 0.9, 
+            metalness: 0.1 
+        });
+        const dam = new THREE.Mesh(damGeo, damMat);
+        dam.position.y = -20;
+        dam.receiveShadow = true;
+        scene.add(dam);
+
+        // Scattered Logs around edge
+        for (let i = 0; i < 60; i++) {
+            const logGeo = new THREE.CylinderGeometry(10, 10, 100 + Math.random()*60);
+            const log = new THREE.Mesh(logGeo, damMat);
+            const angle = Math.random() * Math.PI * 2;
+            log.position.set(Math.cos(angle) * (STADIUM_RADIUS + 20), -10, Math.sin(angle) * (STADIUM_RADIUS + 20));
+            log.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            scene.add(log);
+        }
+
+        // Water Plane
+        const waterGeo = new THREE.PlaneGeometry(4000, 4000);
+        const waterMat = new THREE.MeshStandardMaterial({ color: 0x55aaff, transparent: true, opacity: 0.5, roughness: 0.1 });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = -35;
+        scene.add(water);
+
+        // Soft Clouds
+        for(let i = 0; i < 15; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = STADIUM_RADIUS + 200 + Math.random() * 400;
+            createCloud(Math.cos(angle) * dist, 50 + Math.random() * 150, Math.sin(angle) * dist, Math.random() * 3 + 1.5);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    }
+
+    function createCloud(x, y, z, scale) {
+        const cloud = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 });
+        
+        const p1 = new THREE.Mesh(new THREE.SphereGeometry(15, 12, 12), mat);
+        const p2 = new THREE.Mesh(new THREE.SphereGeometry(20, 12, 12), mat);
+        p2.position.set(15, 0, 0);
+        const p3 = new THREE.Mesh(new THREE.SphereGeometry(15, 12, 12), mat);
+        p3.position.set(30, -5, 0);
+        
+        cloud.add(p1, p2, p3);
+        cloud.position.set(x, y, z);
+        cloud.scale.setScalar(scale);
+        scene.add(cloud);
+    }
+
+    // --- 3D Powerup Models ---
+    function createCinnamorollModel() {
+        const group = new THREE.Group();
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+        const pinkMat = new THREE.MeshStandardMaterial({ color: 0xffb6c1, roughness: 0.8 });
+        const blueMat = new THREE.MeshBasicMaterial({ color: 0x3399ff });
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.3, metalness: 0.6 });
+
+        // Body
+        const body = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 14), whiteMat);
+        body.position.y = 5;
+        body.castShadow = true;
+        group.add(body);
+
+        // Head
+        const head = new THREE.Mesh(new THREE.BoxGeometry(18, 12, 14), whiteMat);
+        head.position.set(0, 14, 6);
+        head.castShadow = true;
+        group.add(head);
+
+        // Floppy Ears
+        const earGeo = new THREE.BoxGeometry(22, 6, 6);
+        const earL = new THREE.Mesh(earGeo, whiteMat);
+        earL.position.set(15, 12, 6);
+        earL.rotation.z = -0.4;
+        const earR = new THREE.Mesh(earGeo, whiteMat);
+        earR.position.set(-15, 12, 6);
+        earR.rotation.z = 0.4;
+        group.add(earL, earR);
+
+        // Eyes
+        const eyeGeo = new THREE.BoxGeometry(2, 3, 1);
+        const eyeL = new THREE.Mesh(eyeGeo, blueMat);
+        eyeL.position.set(4, 14, 13.5);
+        const eyeR = new THREE.Mesh(eyeGeo, blueMat);
+        eyeR.position.set(-4, 14, 13.5);
+        group.add(eyeL, eyeR);
+
+        // Blush
+        const blushGeo = new THREE.BoxGeometry(3, 2, 1);
+        const blushL = new THREE.Mesh(blushGeo, pinkMat);
+        blushL.position.set(8, 12, 13.5);
+        const blushR = new THREE.Mesh(blushGeo, pinkMat);
+        blushR.position.set(-8, 12, 13.5);
+        group.add(blushL, blushR);
+
+        // Star
+        const star = new THREE.Mesh(new THREE.OctahedronGeometry(4), goldMat);
+        star.position.set(8, 8, 16);
+        group.add(star);
+        
+        return group;
+    }
+
+    function createFeatherModel() {
+        const group = new THREE.Group();
+        const featherMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+        const shaftMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.3 });
+        
+        const vane = new THREE.Mesh(new THREE.BoxGeometry(6, 18, 0.5), featherMat);
+        vane.position.y = 9;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 24), shaftMat);
+        shaft.position.y = 12;
+        
+        group.add(vane, shaft);
+        group.rotation.x = Math.PI / 4;
+        return group;
+    }
+
+    function createPomPomPurinModel() {
+        const group = new THREE.Group();
+        const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffe55c, roughness: 0.9 });
+        const brownMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 1.0 });
+
+        // Plump body
+        const body = new THREE.Mesh(new THREE.BoxGeometry(16, 14, 16), yellowMat);
+        body.position.y = 7;
+        body.castShadow = true;
+        group.add(body);
+
+        // Signature Brown Beret
+        const beretGeo = new THREE.CylinderGeometry(5, 5, 3, 12);
+        const beret = new THREE.Mesh(beretGeo, brownMat);
+        beret.position.set(0, 15, 0);
+        group.add(beret);
+
+        // Floppy dog ears
+        const earGeo = new THREE.BoxGeometry(4, 10, 4);
+        const earL = new THREE.Mesh(earGeo, yellowMat);
+        earL.position.set(9, 6, 0);
+        earL.rotation.z = -0.2;
+        const earR = new THREE.Mesh(earGeo, yellowMat);
+        earR.position.set(-9, 6, 0);
+        earR.rotation.z = 0.2;
+        group.add(earL, earR);
+
+        // Cute face
+        const faceMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        const eyeL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1), faceMat);
+        eyeL.position.set(4, 9, 8.5);
+        const eyeR = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1), faceMat);
+        eyeR.position.set(-4, 9, 8.5);
+        const nose = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 1), faceMat);
+        nose.position.set(0, 7.5, 8.5);
+        group.add(eyeL, eyeR, nose);
+
+        return group;
+    }
+
+    // --- Game Entities ---
+    class Blade {
+        constructor(x, z, isPlayer = false) {
+            this.x = x;
+            this.y = 15; // Raised resting height due to thicker blade
+            this.z = z;
+            this.vx = 0;
+            this.vz = 0;
+            
+            this.baseRadius = BLADE_RADIUS;
+            this.baseMass = isPlayer ? 3.0 : 0.6;
+            this.radius = this.baseRadius;
+            this.mass = this.baseMass;
+            this.scaleMult = 1.0;
+
+            this.isPlayer = isPlayer;
+            this.isAlive = true;
+            this.isFalling = false;
+            
+            // Assign Colors (Sanrio Pastel Palette - Multi Colored)
+            const pastelPalette = [0xffb6c1, 0x98ff98, 0xe6e6fa, 0xadd8e6, 0xffdab9, 0xfffaca, 0xffb347, 0xffd1dc, 0xcc99ff, 0x99ccff];
+            this.colorBody = isPlayer ? 0xffffff : pastelPalette[Math.floor(Math.random() * pastelPalette.length)];
+            this.colorCore = isPlayer ? 0x3399ff : pastelPalette[Math.floor(Math.random() * pastelPalette.length)];
+            this.colorRing = isPlayer ? 0xFFD700 : pastelPalette[Math.floor(Math.random() * pastelPalette.length)];
+            
+            // Visual / Animation
+            this.rotationSpeed = isPlayer ? 0.4 : 0.2;
+            this.squash = 0;
+            
+            // Powerup States
+            this.dashFrames = 0;
+            this.isExtremeDashing = false;
+            this.dashCooldownFrames = 0;
+            
+            this.hasCinnamoroll = false;
+            this.cinnamorollTimer = 0;
+            
+            this.hasFeather = false;
+            this.featherTimer = 0;
+
+            this.hasPurin = false;
+            this.purinTimer = 0;
+            
+            this.petMesh = null; // Powerup visual attach
+
+            this.createMesh();
+        }
+
+        createMesh() {
+            this.mesh = new THREE.Group();
+
+            // Main body - Made thicker (Height from 8 to 16)
+            const bodyGeo = new THREE.CylinderGeometry(this.baseRadius, this.baseRadius * 0.8, 16, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({ 
+                color: this.colorBody, 
+                metalness: 0.3, 
+                roughness: 0.5,
+                emissive: this.colorBody,
+                emissiveIntensity: 0.4
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 8;
+            body.castShadow = true;
+            this.mesh.add(body);
+
+            // Center core - Made thicker (Height from 10 to 20)
+            const coreGeo = new THREE.CylinderGeometry(this.baseRadius * 0.4, this.baseRadius * 0.4, 20, 8);
+            const coreMat = new THREE.MeshStandardMaterial({ color: this.colorCore, metalness: 0.8 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            core.position.y = 10;
+            this.mesh.add(core);
+
+            // Attack Ring - Made thicker
+            const ringGeo = new THREE.TorusGeometry(this.baseRadius, 2.5, 8, 6); // thicker ring
+            const ringMat = new THREE.MeshStandardMaterial({ color: this.colorRing, metalness: 0.9, roughness: 0.2 }); 
+            const attackRing = new THREE.Mesh(ringGeo, ringMat);
+            attackRing.rotation.x = Math.PI / 2;
+            attackRing.position.y = 8;
+            this.mesh.add(attackRing);
+
+            this.mesh.position.set(this.x, this.y, this.z);
+            scene.add(this.mesh);
+        }
+
+        update() {
+            if (!this.isAlive) return;
+
+            if (this.isFalling) {
+                this.y -= 5;
+                this.mesh.position.y = this.y;
+                this.mesh.rotation.x += 0.1;
+                this.mesh.rotation.z += 0.1;
+                if (this.y < -300) {
+                    this.isAlive = false;
+                    scene.remove(this.mesh);
+                }
+                return;
+            }
+
+            // Flying physics vs Ground physics
+            if (this.hasFeather) {
+                this.vx *= FLYING_FRICTION;
+                this.vz *= FLYING_FRICTION;
+                this.y = THREE.MathUtils.lerp(this.y, 35 * this.scaleMult, 0.1); // Hover higher
+            } else {
+                this.vx *= FRICTION;
+                this.vz *= FRICTION;
+                this.y = THREE.MathUtils.lerp(this.y, 15 * this.scaleMult, 0.1); // Ground level
+            }
+
+            // Cap velocity
+            const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
+            if (speed > MAX_VELOCITY) {
+                this.vx = (this.vx / speed) * MAX_VELOCITY;
+                this.vz = (this.vz / speed) * MAX_VELOCITY;
+            }
+
+            this.x += this.vx;
+            this.z += this.vz;
+
+            this.mesh.position.x = this.x;
+            this.mesh.position.z = this.z;
+            this.mesh.position.y = this.y;
+
+            this.mesh.rotation.y -= this.rotationSpeed + (speed * 0.02);
+
+            if (this.squash > 0) {
+                this.squash -= 0.1;
+                let sXZ = this.scaleMult * (1.0 + Math.sin(this.squash * Math.PI) * 0.4);
+                let sY = this.scaleMult * (1.0 - Math.sin(this.squash * Math.PI) * 0.3);
+                this.mesh.scale.set(sXZ, sY, sXZ);
+            } else {
+                this.mesh.scale.set(this.scaleMult, this.scaleMult, this.scaleMult);
+            }
+
+            // Check field powerups
+            if (powerupItem) {
+                const distToItem = Math.hypot(this.x - powerupItem.mesh.position.x, this.z - powerupItem.mesh.position.z);
+                if (distToItem < this.radius + 15) {
+                    if (powerupItem.type === 'cinnamoroll') this.activateCinnamorollPower();
+                    else if (powerupItem.type === 'feather') this.activateFeatherPower();
+                    else this.activatePurinPower();
+                    
+                    scene.remove(powerupItem.mesh);
+                    powerupItem = null;
+                }
+            }
+
+            // Check falling into random holes (feathers let you hover over them!)
+            if (!this.isFalling && !this.hasFeather) {
+                for (let h of activeHoles) {
+                    if (h.state === 'open' || h.state === 'opening') {
+                        const distToHole = Math.hypot(this.x - h.x, this.z - h.z);
+                        if (distToHole < h.currentRadius * 0.8) { // Forgiving edge
+                            this.isFalling = true;
+                            this.vx *= 0.1; // Drop straight down immediately
+                            this.vz *= 0.1;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (this.isPlayer) {
+                this.handlePlayerInput();
+            } else {
+                this.handleEnemyAI();
+            }
+
+            this.handleBuffTimers();
+            this.checkStadiumBounds();
+        }
+
+        handleBuffTimers() {
+            if (this.hasCinnamoroll) {
+                this.cinnamorollTimer--;
+                if (this.petMesh) this.petMesh.rotation.y += 0.05;
+                if (this.cinnamorollTimer <= 0) {
+                    this.hasCinnamoroll = false;
+                    if (this.petMesh) { this.mesh.remove(this.petMesh); this.petMesh = null; }
+                }
+            }
+
+            if (this.hasFeather) {
+                this.featherTimer--;
+                if (this.petMesh) this.petMesh.rotation.y += 0.05;
+                if (this.featherTimer <= 0) {
+                    this.hasFeather = false;
+                    if (this.petMesh) { this.mesh.remove(this.petMesh); this.petMesh = null; }
+                }
+            }
+
+            if (this.hasPurin) {
+                this.purinTimer--;
+                if (this.petMesh) this.petMesh.rotation.y += 0.05;
+                if (this.purinTimer <= 0) {
+                    this.hasPurin = false;
+                    this.scaleMult = 1.0;
+                    this.radius = this.baseRadius;
+                    this.mass = this.baseMass;
+                    if (this.petMesh) { this.mesh.remove(this.petMesh); this.petMesh = null; }
+                }
+            }
+        }
+
+        activateCinnamorollPower() {
+            this.hasCinnamoroll = true;
+            this.hasFeather = false; // Override
+            this.hasPurin = false; // Override
+            this.scaleMult = 1.0;
+            this.radius = this.baseRadius;
+            this.mass = this.baseMass;
+            this.cinnamorollTimer = 600; // ~10 seconds
+            if (this.petMesh) this.mesh.remove(this.petMesh);
+
+            this.petMesh = createCinnamorollModel();
+            this.petMesh.position.set(0, 22, 0);
+            this.petMesh.scale.set(0.6, 0.6, 0.6);
+            this.mesh.add(this.petMesh);
+            
+            createSparks(this.x, this.z, 0xFFD700, 30);
+            if (this.isPlayer) showAlert("CINNAMOROLL MEGA BOUNCE!", "#FFD700");
+        }
+
+        activateFeatherPower() {
+            this.hasFeather = true;
+            this.hasCinnamoroll = false; // Override
+            this.hasPurin = false; // Override
+            this.scaleMult = 1.0;
+            this.radius = this.baseRadius;
+            this.mass = this.baseMass;
+            this.featherTimer = 600; 
+            if (this.petMesh) this.mesh.remove(this.petMesh);
+
+            this.petMesh = createFeatherModel();
+            this.petMesh.position.set(0, 22, 0);
+            createSparks(this.x, this.z, 0xffffff, 30);
+            if (this.isPlayer) showAlert("FEATHER FLYING POWER!", "#ffffff");
+        }
+
+        activatePurinPower() {
+            this.hasPurin = true;
+            this.hasCinnamoroll = false; 
+            this.hasFeather = false; 
+            this.purinTimer = 600; 
+            if (this.petMesh) this.mesh.remove(this.petMesh);
+
+            this.petMesh = createPomPomPurinModel();
+            this.petMesh.position.set(0, 24, 0);
+            this.petMesh.scale.set(0.7, 0.7, 0.7);
+            this.mesh.add(this.petMesh);
+
+            this.scaleMult = 2.0; // Double the size!
+            this.radius = this.baseRadius * 2.0;
+            this.mass = this.baseMass * 5.0; // Very heavy!
+            
+            createSparks(this.x, this.z, 0xffe55c, 30);
+            if (this.isPlayer) showAlert("POM POM PURIN MEGA SIZE!", "#ffe55c");
+        }
+
+        triggerDash(isExtreme) {
+            if (this.dashCooldownFrames > 0) return;
+
+            if (isExtreme) {
+                this.dashFrames = DASH_DURATION * 1.5;
+                this.isExtremeDashing = true;
+                this.dashCooldownFrames = DASH_COOLDOWN * 2;
+                createSparks(this.x, this.z, 0xFFD700, 20); // Gold sparks for extreme
+                if(this.isPlayer) showAlert("EXTREME DASH!", "#FFD700");
+            } else {
+                this.dashFrames = DASH_DURATION;
+                this.isExtremeDashing = false;
+                this.dashCooldownFrames = DASH_COOLDOWN;
+            }
+        }
+
+        handlePlayerInput() {
+            let ax = 0; let az = 0;
+            if (keys.ArrowUp) az -= 1;
+            if (keys.ArrowDown) az += 1;
+            if (keys.ArrowLeft) ax -= 1;
+            if (keys.ArrowRight) ax += 1;
+
+            if (ax !== 0 && az !== 0) {
+                const len = Math.sqrt(ax * ax + az * az);
+                ax /= len; az /= len;
+            }
+
+            if (this.dashCooldownFrames > 0) this.dashCooldownFrames--;
+
+            let currentSpeed = PLAYER_SPEED;
+            if (this.hasFeather) currentSpeed *= 1.3; // Faster when flying
+
+            if (this.dashFrames > 0) {
+                const mult = this.isExtremeDashing ? EXTREME_DASH_MULTIPLIER : DASH_MULTIPLIER;
+                currentSpeed *= mult;
+                this.dashFrames--;
+                if(Math.random() > 0.5) {
+                    const sparkColor = this.isExtremeDashing ? 0xFFD700 : 0xffffff;
+                    createSparks(this.x, this.z, sparkColor, this.isExtremeDashing ? 3 : 1);
+                }
+            }
+
+            this.vx += ax * currentSpeed;
+            this.vz += az * currentSpeed;
+        }
+
+        handleEnemyAI() {
+            const dx = 0 - this.x; 
+            const dz = 0 - this.z;
+            const distToCenter = Math.sqrt(dx * dx + dz * dz);
+            
+            if (distToCenter > STADIUM_RADIUS * 0.7) {
+                this.vx += (dx / distToCenter) * ENEMY_SPEED * 1.5;
+                this.vz += (dz / distToCenter) * ENEMY_SPEED * 1.5;
+            } else {
+                if (Math.random() < 0.05) {
+                    this.vx += (Math.random() - 0.5) * ENEMY_SPEED;
+                    this.vz += (Math.random() - 0.5) * ENEMY_SPEED;
+                }
+            }
+        }
+
+        checkStadiumBounds() {
+            const dist = Math.hypot(this.x, this.z);
+            if (dist > STADIUM_RADIUS && !this.isFalling) {
+                this.isFalling = true;
+                
+                // Transfer powerup from dying enemy to player
+                if (!this.isPlayer && player.isAlive && !player.isFalling) {
+                    if (this.hasCinnamoroll) {
+                        player.activateCinnamorollPower();
+                        this.hasCinnamoroll = false;
+                        showAlert("YOU INHERITED CINNAMOROLL!", "#FFD700");
+                    } else if (this.hasFeather) {
+                        player.activateFeatherPower();
+                        this.hasFeather = false;
+                        showAlert("YOU INHERITED A FEATHER!", "#ffffff");
+                    } else if (this.hasPurin) {
+                        player.activatePurinPower();
+                        this.hasPurin = false;
+                        showAlert("YOU INHERITED POM POM PURIN!", "#ffe55c");
+                    }
+                }
+            }
+        }
+    }
+
+    class StadiumHole {
+        constructor() {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * (STADIUM_RADIUS * 0.7);
+            this.x = Math.cos(angle) * dist;
+            this.z = Math.sin(angle) * dist;
+            this.maxRadius = 50 + Math.random() * 30; // Random size
+            this.currentRadius = 0.1;
+            this.state = 'opening'; 
+            this.timer = 0;
+            
+            // Dark abyss cylinder
+            const geo = new THREE.CylinderGeometry(1, 1, 45, 32);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x051525 }); // Very dark blue/black
+            this.mesh = new THREE.Mesh(geo, mat);
+            this.mesh.position.set(this.x, -20.5, this.z); // Flush with floor
+            scene.add(this.mesh);
+        }
+
+        update() {
+            if (this.state === 'opening') {
+                this.currentRadius += 1.5;
+                if (this.currentRadius >= this.maxRadius) {
+                    this.state = 'open';
+                    this.timer = 180; // Stay open for about 3 seconds
+                }
+            } else if (this.state === 'open') {
+                this.timer--;
+                if (this.timer <= 0) {
+                    this.state = 'closing';
+                }
+            } else if (this.state === 'closing') {
+                this.currentRadius -= 1.5;
+                if (this.currentRadius <= 0.1) {
+                    return false; // Remove me
+                }
+            }
+            
+            // Scale mesh horizontally to match radius
+            this.mesh.scale.set(this.currentRadius, 1, this.currentRadius);
+            return true;
+        }
+    }
+
+    class SnakeHazard {
+        constructor() {
+            this.angle = Math.random() * Math.PI * 2;
+            // Start way outside and high up
+            this.x = Math.cos(this.angle) * STADIUM_RADIUS * 1.5;
+            this.z = Math.sin(this.angle) * STADIUM_RADIUS * 1.5;
+            this.y = 800; 
+            
+            // Move across the stage
+            this.vx = -Math.cos(this.angle) * 12; 
+            this.vz = -Math.sin(this.angle) * 12;
+            this.vy = -15; // Falling speed
+            
+            this.radius = 35;
+            this.length = 1200;
+            
+            // Pastel green snake body
+            const geo = new THREE.CylinderGeometry(this.radius, this.radius, this.length, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x98ff98, roughness: 0.6 }); 
+            this.mesh = new THREE.Mesh(geo, mat);
+            this.mesh.castShadow = true;
+            
+            // Orient correctly to look like it's sweeping across
+            this.mesh.rotation.x = Math.PI / 2;
+            this.mesh.rotation.z = this.angle;
+            
+            this.mesh.position.set(this.x, this.y, this.z);
+            scene.add(this.mesh);
+        }
+
+        update() {
+            if (this.y > 15) {
+                this.y += this.vy;
+                if (this.y < 15) {
+                    this.y = 15; // Hit the ground
+                    // Shake effect on hit could go here
+                }
+            } else {
+                this.x += this.vx;
+                this.z += this.vz;
+            }
+            
+            this.mesh.position.set(this.x, this.y, this.z);
+            
+            const dist = Math.hypot(this.x, this.z);
+            if (this.y === 15 && dist > STADIUM_RADIUS * 1.8) {
+                return false; // Escaped the bounds, remove
+            }
+            return true;
+        }
+
+        checkCollision(blade) {
+            if (this.y > 50 || blade.isFalling || !blade.isAlive) return;
+            
+            const dx = blade.x - this.x;
+            const dz = blade.z - this.z;
+            
+            // Rotate relative to snake's angle
+            const cos = Math.cos(-this.angle);
+            const sin = Math.sin(-this.angle);
+            const localX = dx * cos - dz * sin;
+            const localZ = dx * sin + dz * cos;
+            
+            // If inside the cylinder volume
+            if (Math.abs(localZ) < this.length / 2 && Math.abs(localX) < this.radius + blade.radius) {
+                // Apply sweeping knockback
+                blade.vx += this.vx * 0.8;
+                blade.vz += this.vz * 0.8;
+                createSparks(blade.x, blade.z, 0x98ff98, 3);
+            }
+        }
+    }
+
+    // --- Physics & Collisions ---
+    function checkCollisions() {
+        for (let i = 0; i < allBlades.length; i++) {
+            if (!allBlades[i].isAlive || allBlades[i].isFalling) continue;
+            for (let j = i + 1; j < allBlades.length; j++) {
+                if (!allBlades[j].isAlive || allBlades[j].isFalling) continue;
+
+                const b1 = allBlades[i];
+                const b2 = allBlades[j];
+
+                const dx = b2.x - b1.x;
+                const dz = b2.z - b1.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                const minDist = b1.radius + b2.radius;
+
+                if (distance < minDist) {
+                    resolveCollision(b1, b2, dx, dz, distance, minDist);
+                }
+            }
+        }
+    }
+
+    function resolveCollision(b1, b2, dx, dz, distance, minDist) {
+        if (distance === 0) { dx = 1; dz = 0; distance = 1; }
+        const nx = dx / distance;
+        const nz = dz / distance;
+
+        const rvx = b2.vx - b1.vx;
+        const rvz = b2.vz - b1.vz;
+        const velAlongNormal = rvx * nx + rvz * nz;
+
+        if (velAlongNormal > 0) return;
+
+        let currentRestitution = restitution; // Depends on difficulty
+        
+        let buffActive = false;
+        let buffColor = 0xffffff;
+
+        if (b1.hasCinnamoroll || b2.hasCinnamoroll) {
+            currentRestitution *= 2.5; 
+            buffActive = true;
+            buffColor = 0xFFD700;
+        } else if (b1.hasPurin || b2.hasPurin) {
+            currentRestitution *= 1.5; 
+            buffActive = true;
+            buffColor = 0xffe55c;
+        }
+
+        const j = -(1 + currentRestitution) * velAlongNormal;
+        const invMassSum = (1 / b1.mass) + (1 / b2.mass);
+        let impulse = j / invMassSum;
+
+        b1.vx -= (nx * impulse) / b1.mass;
+        b1.vz -= (nz * impulse) / b1.mass;
+        b2.vx += (nx * impulse) / b2.mass;
+        b2.vz += (nz * impulse) / b2.mass;
+
+        b1.squash = 1.0;
+        b2.squash = 1.0;
+
+        // Apply Dash Knockbacks
+        applyDashCollision(b1, b2, nx, nz);
+        applyDashCollision(b2, b1, -nx, -nz);
+
+        if (buffActive) {
+             createSparks(b1.x + nx * b1.radius, b1.z + nz * b1.radius, buffColor, 15);
+             if (b1.hasCinnamoroll || b1.hasPurin) { b2.vx += nx * 15; b2.vz += nz * 15; b1.vx *= 0.8; b1.vz *= 0.8; }
+             if (b2.hasCinnamoroll || b2.hasPurin) { b1.vx -= nx * 15; b1.vz -= nz * 15; b2.vx *= 0.8; b2.vz *= 0.8; }
+        } else if (Math.random() > 0.5) {
+             createSparks(b1.x + nx * b1.radius, b1.z + nz * b1.radius, 0xffffff, 3);
+        }
+
+        // Play collision sound effect
+        if (hitSynth) {
+            let note = "C3";
+            if (Math.abs(velAlongNormal) > 8) note = "C4";
+            if (Math.abs(velAlongNormal) > 15) note = "G4";
+            hitSynth.triggerAttackRelease(note, "16n");
+        }
+
+        // Positional correction
+        const percent = 0.8; const slop = 0.1;
+        const penetration = minDist - distance;
+        if (penetration > slop) {
+            const correctionScalar = (penetration / invMassSum) * percent;
+            const cx = nx * correctionScalar;
+            const cz = nz * correctionScalar;
+            b1.x -= cx / b1.mass; b1.z -= cz / b1.mass;
+            b2.x += cx / b2.mass; b2.z += cz / b2.mass;
+        }
+    }
+
+    function applyDashCollision(attacker, defender, nx, nz) {
+        if (attacker.dashFrames > 0) {
+            const kb = attacker.isExtremeDashing ? 18 : 8;
+            defender.vx += nx * kb; 
+            defender.vz += nz * kb;
+            const sparkColor = attacker.isExtremeDashing ? 0xFFD700 : 0xffffff;
+            createSparks(attacker.x + nx * attacker.radius, attacker.z + nz * attacker.radius, sparkColor, 8);
+        }
+    }
+
+    // --- Powerup Spawner ---
+    function trySpawnPowerup() {
+        if (!powerupItem && Math.random() < 0.005) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * (STADIUM_RADIUS * 0.7);
+            const x = Math.cos(angle) * dist;
+            const z = Math.sin(angle) * dist;
+
+            const rand = Math.random();
+            let type = 'cinnamoroll';
+            let mesh;
+            
+            if (rand < 0.33) {
+                type = 'cinnamoroll';
+                mesh = createCinnamorollModel();
+            } else if (rand < 0.66) {
+                type = 'feather';
+                mesh = createFeatherModel();
+            } else {
+                type = 'purin';
+                mesh = createPomPomPurinModel();
+            }
+            
+            mesh.position.set(x, 15, z);
+            scene.add(mesh);
+
+            powerupItem = {
+                mesh: mesh,
+                type: type,
+                time: 0
+            };
+        }
+
+        if (powerupItem) {
+            powerupItem.time += 0.05;
+            powerupItem.mesh.position.y = 15 + Math.sin(powerupItem.time) * 3;
+            powerupItem.mesh.rotation.y += 0.02; 
+        }
+    }
+
+    // --- Visual Effects ---
+    function createSparks(x, z, colorHex, count = 5) {
+        for(let i=0; i<count; i++) {
+            const size = Math.random() * 2 + 1;
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size),
+                new THREE.MeshBasicMaterial({ color: colorHex })
+            );
+            mesh.position.set(x, 15, z); // Adjusted spawn height to match thicker blades
+            scene.add(mesh);
+            particles.push({
+                mesh: mesh,
+                vx: (Math.random() - 0.5) * 12,
+                vy: Math.random() * 10 + 5,
+                vz: (Math.random() - 0.5) * 12,
+                life: 1.0
+            });
+        }
+    }
+
+    function updateParticles() {
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            p.mesh.position.x += p.vx;
+            p.mesh.position.y += p.vy;
+            p.mesh.position.z += p.vz;
+            p.vy -= 0.5; // gravity
+            p.life -= 0.03;
+            
+            p.mesh.scale.setScalar(Math.max(0.001, p.life)); // Prevent negative scale errors
+
+            if(p.life <= 0) {
+                scene.remove(p.mesh);
+                particles.splice(i, 1);
+            }
+        }
+    }
+
+    // --- Game Lifecycle ---
+    function initGame() {
+        if (!scene) initThreeJS();
+
+        allBlades.forEach(b => { if(b.mesh) scene.remove(b.mesh); });
+        particles.forEach(p => scene.remove(p.mesh));
+        if (powerupItem) { scene.remove(powerupItem.mesh); powerupItem = null; }
+        if (snake) { scene.remove(snake.mesh); snake = null; }
+        activeHoles.forEach(h => scene.remove(h.mesh));
+        activeHoles = [];
+        
+        allBlades = [];
+        particles = [];
+        isGameOver = false;
+        gameOverScreen.style.display = 'none';
+        powerupAlertEl.style.display = 'none';
+
+        player = new Blade(0, 0, true);
+        allBlades.push(player);
+
+        for (let i = 0; i < NUM_ENEMIES; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let dist = (Math.random() * 0.5 + 0.3) * STADIUM_RADIUS;
+            let x = Math.cos(angle) * dist;
+            let z = Math.sin(angle) * dist;
+            allBlades.push(new Blade(x, z, false));
+        }
+
+        if (animationId) cancelAnimationFrame(animationId);
+        gameLoop();
+    }
+
+    function gameLoop() {
+        if (isGameOver) return;
+
+        let enemiesAlive = 0;
+        for (let i = 0; i < allBlades.length; i++) {
+            allBlades[i].update();
+            if (!allBlades[i].isPlayer && allBlades[i].isAlive) enemiesAlive++;
+        }
+
+        checkCollisions();
+        updateParticles();
+        trySpawnPowerup();
+
+        // Snake Hazard Logic
+        if (!snake && Math.random() < 0.0005) { // Rare chance to spawn snake
+            snake = new SnakeHazard();
+        }
+        if (snake) {
+            let active = snake.update();
+            if (active) {
+                for (let b of allBlades) {
+                    snake.checkCollision(b);
+                }
+            } else {
+                snake = null; // Remove snake after leaving
+            }
+        }
+
+        // Holes Hazard Logic
+        if (Math.random() < 0.005) { // Occasional chance to spawn a new hole
+            activeHoles.push(new StadiumHole());
+        }
+        for (let i = activeHoles.length - 1; i >= 0; i--) {
+            let active = activeHoles[i].update();
+            if (!active) {
+                scene.remove(activeHoles[i].mesh);
+                activeHoles.splice(i, 1);
+            }
+        }
+
+        if (player.isAlive && !player.isFalling) {
+            const targetCamX = player.x;
+            const targetCamZ = player.z + 850; // Pulled back for much bigger stage
+            camera.position.x += (targetCamX - camera.position.x) * 0.05;
+            camera.position.z += (targetCamZ - camera.position.z) * 0.05;
+            camera.position.y += (650 - camera.position.y) * 0.05; // Look down from higher
+            camera.lookAt(player.x, 0, player.z - 100);
+        }
+
+        enemiesRemainingEl.innerText = `Enemies: ${enemiesAlive}`;
+
+        renderer.render(scene, camera);
+
+        if (!player.isAlive) {
+            endGame(false, enemiesAlive);
+        } else if (enemiesAlive === 0) {
+            endGame(true, 0);
+        }
+
+        animationId = requestAnimationFrame(gameLoop);
+    }
+
+    function endGame(win, remaining) {
+        isGameOver = true;
+        gameOverScreen.style.display = 'flex';
+        powerupAlertEl.style.display = 'none';
+        if (win) {
+            endMessageEl.innerText = "Victory!";
+            endMessageEl.style.color = "#FFD700";
+            endSubMessageEl.innerText = "You knocked everyone out!";
+        } else {
+            endMessageEl.innerText = "Knocked Out!";
+            endMessageEl.style.color = "#ffb6c1";
+            endSubMessageEl.innerText = `You fell out of the beaver dam! ${remaining} enemies remained.`;
+        }
+    }
+
+    window.onload = () => {
+        initThreeJS();
+        renderer.render(scene, camera); // Render the arena behind the start screen
+    };
+</script>
+</body>
+</html>
