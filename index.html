@@ -4,20 +4,23 @@
     <meta charset="UTF-8">
     <title>Full Turtle Games</title>
     <style>
-        /* Green text and widened layout for the image */
+        /* Gradient background and black text */
         body { 
             font-family: sans-serif; 
             padding: 2rem; 
             max-width: 800px; 
-            color: #008000; 
+            color: black; /* Changed to black text */
+            background: linear-gradient(to bottom, white, #8fbc8f); /* White to green gradient */
+            min-height: 100vh; /* Ensures the gradient covers the entire screen height */
+            margin: 0; /* Removes default browser margins for a seamless background */
         }
         li { margin-bottom: 10px; }
         
-        /* Green links */
-        a { text-decoration: none; color: #00cc00; font-weight: bold; }
-        a:hover { text-decoration: underline; color: #00ff00; }
+        /* Dark green links for readability against the gradient */
+        a { text-decoration: none; color: #006400; font-weight: bold; }
+        a:hover { text-decoration: underline; color: #003300; }
         
-        /* Right-aligned image styling */
+        /* Right-aligned video styling */
         .right-image {
             float: right;
             max-width: 300px;
@@ -37,10 +40,10 @@
     </style>
 </head>
 <body>
-    <!-- The image on the right side -->
-   <video class="right-image" autoplay loop muted playsinline>
-    <source src="gemini_generated_video_53cd4597.mp4" type="video/mp4">
-</video>
+    <!-- The video on the right side -->
+    <video class="right-image" autoplay loop muted playsinline>
+        <source src="gemini_generated_video_53cd4597.mp4" type="video/mp4">
+    </video>
 
     <h1>Full Turtle Games</h1>
     <p>Always go full turtle. Choose a game to play:</p>
