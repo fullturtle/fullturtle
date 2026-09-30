@@ -4,15 +4,46 @@
     <meta charset="UTF-8">
     <title>Full Turtle Games</title>
     <style>
-        body { font-family: sans-serif; padding: 2rem; max-width: 600px; }
+        /* Green text and widened layout for the image */
+        body { 
+            font-family: sans-serif; 
+            padding: 2rem; 
+            max-width: 800px; 
+            color: #008000; 
+        }
         li { margin-bottom: 10px; }
-        a { text-decoration: none; color: #0969da; font-weight: bold; }
-        a:hover { text-decoration: underline; }
+        
+        /* Green links */
+        a { text-decoration: none; color: #00cc00; font-weight: bold; }
+        a:hover { text-decoration: underline; color: #00ff00; }
+        
+        /* Right-aligned image styling */
+        .right-image {
+            float: right;
+            max-width: 300px;
+            border-radius: 10px;
+            margin-left: 20px;
+        }
+
+        /* Bouncing logo setup */
+        #bouncing-logo {
+            position: fixed;
+            width: 150px;
+            top: 0;
+            left: 0;
+            z-index: 9999;
+            pointer-events: none; /* Prevents the image from blocking clicks */
+        }
     </style>
 </head>
 <body>
+    <!-- The image on the right side -->
+    <img src="S__38699010.jpg" alt="Right side image" class="right-image">
+
     <h1>Full Turtle Games</h1>
     <p>Always go full turtle. Choose a game to play:</p>
+    
+    <!-- Your updated game list -->
     <ul>
         <li><a href="banana_peeler.html">Fruit Peeler 3D</a></li>
         <li><a href="math_timber.html">Beaver Control</a></li>
@@ -27,5 +58,46 @@
         <li><a href="retro_maze_escaper_horror_update (3).html">Horror Game</a></li>
         <li><a href="muji_rider_98_complete (1).html">Bull Rider</a></li>
     </ul>
+
+    <!-- The bouncing turtle image -->
+    <img src="image_dfee81.png" alt="Bouncing Turtle" id="bouncing-logo">
+
+    <!-- The JavaScript for the DVD-style bounce -->
+    <script>
+        const logo = document.getElementById('bouncing-logo');
+        let x = 50;
+        let y = 50;
+        let dx = 3; // Horizontal speed 
+        let dy = 3; // Vertical speed
+
+        function animate() {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const logoWidth = logo.offsetWidth || 150;
+            const logoHeight = logo.offsetHeight || 150;
+
+            x += dx;
+            y += dy;
+
+            // Reverse direction if it hits the side walls
+            if (x + logoWidth >= screenWidth || x <= 0) {
+                dx = -dx;
+            }
+
+            // Reverse direction if it hits the top or bottom walls
+            if (y + logoHeight >= screenHeight || y <= 0) {
+                dy = -dy;
+            }
+
+            logo.style.left = x + 'px';
+            logo.style.top = y + 'px';
+
+            requestAnimationFrame(animate);
+        }
+
+        // Start animation when image loads
+        logo.onload = () => { animate(); };
+        if (logo.complete) { animate(); }
+    </script>
 </body>
 </html>
