@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muji Rider 98</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Press Start 2P', monospace;
+            background-color: #f2f2f2;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+            color: #333;
+        }
+
+        #game-container {
+            position: relative;
+            aspect-ratio: 4/3;
+            height: 100vh;
+            max-width: 100vw;
+            background-color: #e5e5e5;
+            overflow: hidden;
+        }
+        
+        @media (max-aspect-ratio: 4/3) {
+            #game-container {
+                width: 100vw;
+                height: auto;
+            }
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated; 
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        /* CRT Scanlines Overlay */
+        #ui-layer::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            z-index: 999;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* Phase 1: Circle Rhythm */
+        #rhythm-container {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 4px solid #7F0019;
+            background-color: rgba(200, 200, 200, 0.4);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        #target-zone {
+            position: absolute;
+            top: 10%; left: 50%;
+            width: 30px; height: 30px;
+            background-color: rgba(127, 0, 25, 0.5);
+            border: 2px solid #7F0019;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #target-zone-2 {
+            position: absolute;
+            bottom: 10%; left: 50%;
+            width: 30px; height: 30px;
+            background-color: rgba(127, 0, 25, 0.5);
+            border: 2px solid #7F0019;
+            border-radius: 50%;
+            transform: translate(-50%, 50%);
+        }
+
+        #moving-marker {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 16px; height: 16px;
+            background-color: #d9d9d9;
+            border: 2px solid #333;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Phase 2: Arrow Scroll */
+        #arrow-minigame-container {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
+            width: 320px; height: 250px;
+            background: rgba(242, 242, 242, 0.9);
+            border: 4px solid #7F0019;
+            display: none;
+            overflow: hidden;
+        }
+
+        #target-arrows-row {
+            position: absolute;
+            bottom: 10px;
+            width: 100%; height: 40px;
+        }
+
+        .target-arrow {
+            position: absolute;
+            width: 40px; height: 40px;
+            border: 2px solid rgba(51, 51, 51, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: rgba(51, 51, 51, 0.5);
+            transform: translateX(-50%);
+        }
+
+        #falling-arrows-container {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+
+        .falling-arrow {
+            position: absolute;
+            width: 40px; height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            transform: translateX(-50%);
+        }
+        
+        .arrow-left { color: #8b5a2b; }
+        .arrow-up { color: #5c7a5c; }
+        .arrow-down { color: #6b8e23; }
+        .arrow-right { color: #8fbc8f; }
+
+        /* Phase 3: Alignment */
+        #alignment-minigame-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px; height: 200px;
+            background: rgba(229, 229, 229, 0.7);
+            border: 4px solid #7F0019;
+            display: none;
+            pointer-events: none;
+        }
+        
+        #align-target {
+            position: absolute;
+            width: 40px; height: 40px;
+            border: 4px solid #7F0019;
+            transform: translate(-50%, -50%);
+        }
+
+        #align-player {
+            position: absolute;
+            width: 20px; height: 20px;
+            background-color: #333;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Phase 4: Fishing (Circular pattern) */
+        #fishing-minigame-container {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
+            width: 200px; height: 200px;
+            background: rgba(229, 229, 229, 0.9);
+            border: 4px solid #7F0019;
+            border-radius: 50%;
+            display: none;
+            overflow: hidden;
+        }
+
+        #fishing-pond {
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            border: 2px dashed rgba(127, 0, 25, 0.3);
+            border-radius: 50%;
+        }
+
+        #catch-zone {
+            position: absolute;
+            top: 10px; left: 50%;
+            width: 30px; height: 30px;
+            background-color: rgba(127, 0, 25, 0.2);
+            border: 2px solid #7F0019;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        #fishing-rod {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 2px; height: 45%;
+            background-color: #333;
+            transform-origin: bottom center;
+            transform: translate(-50%, -100%);
+            border-left: 1px dashed #e5e5e5;
+            z-index: 1;
+        }
+
+        #fish-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+
+        .swimming-fish {
+            position: absolute;
+            width: 24px; height: 14px;
+            background-color: #4a707a;
+            border: 2px solid #2a404a;
+            border-radius: 50% 50% 50% 50%;
+            transform-origin: center center;
+            z-index: 3;
+        }
+        
+        .swimming-fish::after {
+            content: "";
+            position: absolute;
+            right: -8px; top: 1px;
+            border-left: 8px solid #4a707a;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+        }
+
+        /* Phase 5: Shrinking Ring */
+        #shrinking-minigame-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px; height: 200px;
+            background: rgba(229, 229, 229, 0.7);
+            border: 4px solid #7F0019;
+            border-radius: 10px;
+            display: none;
+            overflow: hidden;
+        }
+
+        #shrink-target {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px; height: 60px;
+            border: 4px solid #7F0019;
+            border-radius: 50%;
+        }
+
+        #shrink-ring {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(3);
+            width: 60px; height: 60px;
+            border: 4px solid #8b5a2b;
+            border-radius: 50%;
+        }
+
+        /* Phase 6: Semicircle Balance */
+        #semicircle-minigame-container {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
+            width: 200px; height: 100px; 
+            background: rgba(229, 229, 229, 0.9);
+            border: 4px solid #7F0019;
+            border-bottom: none;
+            border-radius: 100px 100px 0 0;
+            display: none;
+            overflow: hidden;
+        }
+
+        #semi-track {
+            position: absolute;
+            bottom: -100px; left: 0;
+            width: 192px; height: 192px;
+            border: 4px dashed rgba(127, 0, 25, 0.3);
+            border-radius: 50%;
+        }
+
+        #semi-zone-pivot, #semi-ball-pivot {
+            position: absolute;
+            bottom: 0; left: 50%;
+            width: 0; height: 0;
+        }
+
+        #semi-zone {
+            position: absolute;
+            bottom: 0; left: -20px; 
+            width: 40px; height: 100px;
+            background-color: rgba(76, 175, 80, 0.5);
+            transform-origin: bottom center;
+        }
+
+        #semi-ball {
+            position: absolute;
+            bottom: 87px; left: -8px;
+            width: 16px; height: 16px;
+            background-color: #333;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform-origin: bottom center;
+        }
+
+        /* Phase 7: Spikes */
+        #spikes-minigame-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 250px; height: 280px;
+            background: rgba(229, 229, 229, 0.9);
+            border: 4px solid #7F0019;
+            display: none;
+            overflow: hidden;
+        }
+
+        .spike-track {
+            position: absolute;
+            top: 0;
+            width: 2px; height: 100%;
+            background: rgba(127, 0, 25, 0.2);
+            transform: translateX(-50%);
+        }
+
+        .falling-spike {
+            position: absolute;
+            width: 20px; height: 40px;
+            background: #e5e5e5;
+            border: 2px solid #333;
+            border-bottom: 8px solid #7F0019;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+        }
+
+        #spike-hammer {
+            position: absolute;
+            bottom: 10px;
+            width: 40px; height: 20px;
+            background: #7F0019;
+            border: 2px solid #333;
+            transform: translateX(-50%);
+            transition: left 0.1s ease;
+        }
+
+        #spike-hit-zone {
+            position: absolute;
+            bottom: 10px;
+            width: 100%; height: 40px;
+            border-top: 2px dashed #7F0019;
+            border-bottom: 2px dashed #7F0019;
+            background: rgba(127, 0, 25, 0.1);
+        }
+
+        /* Phase 8: Jumping Squares */
+        #squares-minigame-container {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
+            width: 280px; height: 180px;
+            background: rgba(229, 229, 229, 0.9);
+            border: 4px solid #7F0019;
+            display: none;
+            overflow: hidden;
+        }
+        
+        #squares-target-line {
+            position: absolute;
+            bottom: 90px; left: 0;
+            width: 100%; height: 4px;
+            background: rgba(76, 175, 80, 0.6);
+            border-top: 2px dashed #4caf50;
+        }
+        
+        .jumping-square {
+            position: absolute;
+            bottom: 10px;
+            width: 30px; height: 30px;
+            background: #333;
+            border: 2px solid #7F0019;
+        }
+
+        .hud-text {
+            color: #333;
+            text-shadow: 1px 1px 0 #fff;
+            font-size: 16px;
+            pointer-events: auto;
+            text-align: center;
+        }
+
+        #stamina-bar-container {
+            width: 250px; height: 20px;
+            background-color: #e5e5e5;
+            border: 4px solid #333;
+            margin-top: 10px;
+        }
+
+        #stamina-bar {
+            width: 100%; height: 100%;
+            background: #7F0019;
+            transition: width 0.1s linear;
+        }
+
+        #phase-indicator {
+            font-size: 14px;
+            color: #7F0019;
+            text-shadow: 1px 1px 0 #fff;
+            margin-top: 10px;
+            display: none;
+        }
+
+        #flash-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(76, 175, 80, 0.4);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 19;
+            transition: opacity 0.25s ease-out;
+        }
+        .flash-active {
+            opacity: 1 !important;
+            transition: none !important;
+        }
+
+        #message-overlay, #game-over-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(242, 242, 242, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            pointer-events: auto;
+            text-align: center;
+        }
+
+        .btn {
+            background-color: #e5e5e5;
+            color: #333;
+            border: 2px solid #333;
+            padding: 15px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 20px;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover { background-color: #d9d9d9; }
+        .hidden { display: none !important; }
+
+        .feedback-text {
+            position: absolute;
+            font-size: 16px;
+            color: #333;
+            text-shadow: 1px 1px 0 #fff;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            z-index: 15;
+            transform: translate(-50%, -50%); /* Centered on coordinates */
+        }
+
+        @keyframes floatUp {
+            0% { transform: translate(-50%, -50%); opacity: 1; }
+            100% { transform: translate(-50%, -80px); opacity: 0; }
+        }
+        
+        #leaderboard-table {
+            color: #333;
+            margin-top: 20px;
+            font-size: 12px;
+            line-height: 2;
+        }
+        #name-input {
+            background: #e5e5e5;
+            color: #7F0019;
+            border: 2px solid #333;
+            font-family: inherit;
+            font-size: 20px;
+            width: 80px;
+            text-align: center;
+            margin: 10px 0;
+            padding: 5px;
+        }
+        
+        #music-upload-label {
+            margin-top: 20px;
+            font-size: 10px;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 1px dashed #666;
+            padding-bottom: 2px;
+        }
+        #music-upload { display: none; }
+        
+        .practice-btn {
+            font-size: 10px;
+            padding: 10px;
+            margin: 5px;
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="ui-layer">
+            <div class="flex flex-col items-center w-full">
+                <div id="score-display" class="hud-text">SCORE: 0</div>
+                <div id="stamina-bar-container"><div id="stamina-bar"></div></div>
+                <div id="mode-indicator" class="hud-text text-xs mt-2 hidden text-blue-800">PRACTICE MODE</div>
+                <div id="phase-indicator">PHASE 1</div>
+            </div>
+            
+            <div id="instruction-text" class="hud-text mb-8 hidden">SPACE to action!</div>
+            
+            <!-- Phase 1 UI -->
+            <div id="rhythm-container">
+                <div id="target-zone"></div>
+                <div id="target-zone-2"></div>
+                <div id="moving-marker"></div>
+            </div>
+
+            <!-- Phase 2 UI -->
+            <div id="arrow-minigame-container">
+                <div id="falling-arrows-container"></div>
+                <div id="target-arrows-row">
+                    <div class="target-arrow" id="target-left" style="left: 12.5%">←</div>
+                    <div class="target-arrow" id="target-up" style="left: 37.5%">↑</div>
+                    <div class="target-arrow" id="target-down" style="left: 62.5%">↓</div>
+                    <div class="target-arrow" id="target-right" style="left: 87.5%">→</div>
+                </div>
+            </div>
+            
+            <!-- Phase 3 UI -->
+            <div id="alignment-minigame-container">
+                <div id="align-target"></div>
+                <div id="align-player"></div>
+            </div>
+
+            <!-- Phase 4 UI (Fishing) -->
+            <div id="fishing-minigame-container">
+                <div id="fishing-pond"></div>
+                <div id="catch-zone"></div>
+                <div id="fishing-rod"></div>
+                <div id="fish-container"></div>
+            </div>
+
+            <!-- Phase 5 UI -->
+            <div id="shrinking-minigame-container">
+                <div id="shrink-target"></div>
+                <div id="shrink-ring"></div>
+            </div>
+
+            <!-- Phase 6 UI -->
+            <div id="semicircle-minigame-container">
+                <div id="semi-track"></div>
+                <div id="semi-zone-pivot"><div id="semi-zone"></div></div>
+                <div id="semi-ball-pivot"><div id="semi-ball"></div></div>
+            </div>
+
+            <!-- Phase 7 UI -->
+            <div id="spikes-minigame-container">
+                <div class="spike-track" style="left: 16.6%"></div>
+                <div class="spike-track" style="left: 50%"></div>
+                <div class="spike-track" style="left: 83.3%"></div>
+                <div id="spike-hit-zone"></div>
+                <div id="spike-hammer" style="left: 50%"></div>
+            </div>
+            
+            <!-- Phase 8 UI -->
+            <div id="squares-minigame-container">
+                <div id="squares-target-line"></div>
+                <div class="jumping-square" style="left: 10%"></div>
+                <div class="jumping-square" style="left: 35%"></div>
+                <div class="jumping-square" style="left: 60%"></div>
+                <div class="jumping-square" style="left: 85%"></div>
+            </div>
+        </div>
+
+        <div id="flash-overlay"></div>
+
+        <div id="message-overlay">
+            <h1 class="text-4xl text-gray-800 font-bold mb-6" style="text-shadow: 2px 2px 0 #7F0019;">MUJI RIDER<br>98</h1>
+            
+            <div id="main-menu-content" class="flex flex-col items-center">
+                <p class="text-gray-700 text-xs mb-4 leading-relaxed max-w-sm">
+                    Adapt to 8 dynamic phases. Don't lose your grip.
+                </p>
+                
+                <div class="flex gap-4">
+                    <button id="start-btn" class="btn">START</button>
+                    <button id="open-practice-btn" class="btn">PRACTICE</button>
+                </div>
+                
+                <div id="difficulty-selector" class="mt-4 flex gap-4">
+                    <button class="diff-btn btn !mt-0 px-4 py-2" data-diff="0.7">EASY</button>
+                    <button class="diff-btn btn !mt-0 px-4 py-2" style="border-color: #7F0019; background-color: #d9d9d9;" data-diff="1.0">NORMAL</button>
+                    <button class="diff-btn btn !mt-0 px-4 py-2" data-diff="1.5">HARD</button>
+                </div>
+                
+                <label id="music-upload-label" for="music-upload">LOAD CUSTOM CD TRACK (.MP3/.WAV)</label>
+                <input type="file" id="music-upload" accept="audio/*">
+            </div>
+            
+            <div id="practice-menu-content" class="hidden flex flex-col items-center">
+                <h2 class="text-xl mb-4 font-bold text-gray-800">SELECT DRILL</h2>
+                <div class="grid grid-cols-2 gap-2 max-w-xs">
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE1">1. GRIP</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE2">2. BALANCE</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE3">3. SYNC</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE4">4. FISHING</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE5">5. FOCUS</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE6">6. TENSION</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE7">7. DEFLECT</button>
+                    <button class="btn practice-btn !mt-0" data-phase="PHASE8">8. ALIGN</button>
+                </div>
+                <button id="close-practice-btn" class="btn mt-6 text-xs px-4 py-2">BACK</button>
+            </div>
+            
+            <audio id="bgm-player" loop></audio>
+        </div>
+
+        <div id="game-over-overlay" class="hidden">
+            <h2 class="text-4xl text-red-800 font-bold mb-4 shadow-black">WIPEOUT</h2>
+            <div id="final-score" class="text-xl text-gray-800 mb-2 font-bold">SCORE: 0</div>
+            
+            <div id="high-score-entry" class="hidden flex flex-col items-center">
+                <div class="text-red-800 mt-4 text-lg">NEW HIGH SCORE!</div>
+                <input type="text" id="name-input" maxlength="3" placeholder="AAA" oninput="this.value = this.value.toUpperCase()">
+                <button id="save-score-btn" class="btn text-xs px-2 py-2 mt-2">SAVE</button>
+            </div>
+
+            <div id="leaderboard-table"></div>
+            
+            <button id="restart-btn" class="btn mt-6">MAIN MENU</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf2f2f2); 
+        scene.fog = new THREE.Fog(0xf2f2f2, 20, 80);
+
+        const INTERNAL_W = 320;
+        const INTERNAL_H = 240;
+        const aspect = INTERNAL_W / INTERNAL_H;
+
+        // Cameras
+        const isoSize = 20;
+        const isoCamera = new THREE.OrthographicCamera(-isoSize * aspect, isoSize * aspect, isoSize, -isoSize, 1, 150);
+        isoCamera.position.set(25, 20, 25);
+        isoCamera.up.set(0, 1, 0); 
+        isoCamera.lookAt(0, 3, 0);
+
+        const fpCamera = new THREE.PerspectiveCamera(80, aspect, 0.01, 150);
+        fpCamera.up.set(0, 1, 0);
+
+        const faceCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 150);
+        faceCamera.up.set(0, 1, 0);
+
+        const spinCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 150);
+        spinCamera.up.set(0, 1, 0);
+        
+        let activeCamera = isoCamera;
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false }); 
+        renderer.setSize(INTERNAL_W, INTERNAL_H, false); 
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        let outerBullGroup = new THREE.Group();
+        scene.add(outerBullGroup);
+        let bullGroup = new THREE.Group();
+        let riderGroup = new THREE.Group();
+        let arenaGroup = new THREE.Group();
+        let clock = new THREE.Clock();
+        
+        let riderVelocity = new THREE.Vector3();
+        let isRagdolling = false;
+        
+        let practiceMode = false;
+
+        function createArena() {
+            const groundMat = new THREE.MeshLambertMaterial({ color: 0xe0d6c8, flatShading: true });
+            const groundGeo = new THREE.PlaneGeometry(100, 100, 4, 4);
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            arenaGroup.add(ground);
+
+            const fenceMat = new THREE.MeshLambertMaterial({ color: 0x8b7e74, flatShading: true });
+            const poleGeo = new THREE.CylinderGeometry(0.5, 0.5, 8, 4);
+            const radius = 30;
+            const numPoles = 16; 
+            
+            for(let i=0; i<numPoles; i++) {
+                const angle = (i / numPoles) * Math.PI * 2;
+                const pole = new THREE.Mesh(poleGeo, fenceMat);
+                pole.position.set(Math.cos(angle) * radius, 4, Math.sin(angle) * radius);
+                arenaGroup.add(pole);
+            }
+            scene.add(arenaGroup);
+        }
+
+        function createBullAndRider() {
+            const bullMat = new THREE.MeshLambertMaterial({ color: 0x7F0019, flatShading: true }); 
+            const hornMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2, flatShading: true }); 
+
+            // Bull Model
+            const bodyGeo = new THREE.BoxGeometry(5, 5, 12, 2, 2, 3);
+            const body = new THREE.Mesh(bodyGeo, bullMat);
+            body.position.y = 6;
+            bullGroup.add(body);
+
+            const headGeo = new THREE.BoxGeometry(4, 4, 5);
+            const head = new THREE.Mesh(headGeo, bullMat);
+            head.position.set(0, 1.5, 7);
+            body.add(head);
+
+            const hornGeo = new THREE.ConeGeometry(0.8, 4, 4);
+            hornGeo.translate(0, 2, 0); 
+            const leftHorn = new THREE.Mesh(hornGeo, hornMat);
+            leftHorn.position.set(2, 1, 0);
+            leftHorn.rotation.set(0.5, 0, -1);
+            head.add(leftHorn);
+
+            const rightHorn = new THREE.Mesh(hornGeo, hornMat);
+            rightHorn.position.set(-2, 1, 0);
+            rightHorn.rotation.set(0.5, 0, 1);
+            head.add(rightHorn);
+
+            const legGeo = new THREE.BoxGeometry(1.5, 5, 1.5);
+            legGeo.translate(0, -2.5, 0); 
+            const flLeg = new THREE.Mesh(legGeo, bullMat); flLeg.position.set(2, -2, 4); body.add(flLeg);
+            const frLeg = new THREE.Mesh(legGeo, bullMat); frLeg.position.set(-2, -2, 4); body.add(frLeg);
+            const blLeg = new THREE.Mesh(legGeo, bullMat); blLeg.position.set(2, -2, -4); body.add(blLeg);
+            const brLeg = new THREE.Mesh(legGeo, bullMat); brLeg.position.set(-2, -2, -4); body.add(brLeg);
+
+            // Turtle Rider
+            const shellMat = new THREE.MeshLambertMaterial({ color: 0x4a5d23, flatShading: true });
+            const skinMat = new THREE.MeshLambertMaterial({ color: 0x8fbc8f, flatShading: true }); 
+            const vestMat = new THREE.MeshLambertMaterial({ color: 0xffd700, flatShading: true });
+
+            const shellGeo = new THREE.BoxGeometry(3.5, 1.5, 4);
+            const shell = new THREE.Mesh(shellGeo, shellMat);
+            shell.position.set(0, 3.5, 0);
+            riderGroup.add(shell);
+            
+            const vestGeo = new THREE.BoxGeometry(3.6, 1.6, 2.5);
+            const vest = new THREE.Mesh(vestGeo, vestMat);
+            shell.add(vest);
+
+            const bellyGeo = new THREE.BoxGeometry(3, 0.5, 3.5);
+            const belly = new THREE.Mesh(bellyGeo, skinMat);
+            belly.position.set(0, -1, 0);
+            shell.add(belly);
+
+            const tHeadGeo = new THREE.BoxGeometry(1.5, 1.2, 1.8);
+            const tHead = new THREE.Mesh(tHeadGeo, skinMat);
+            tHead.position.set(0, -0.2, 2.5); 
+            shell.add(tHead);
+
+            const flipperGeo = new THREE.BoxGeometry(1.5, 0.5, 1.2);
+            flipperGeo.translate(0.75, 0, 0); 
+
+            const leftArm = new THREE.Mesh(flipperGeo, skinMat);
+            leftArm.position.set(1.5, -0.8, 1.2);
+            leftArm.rotation.y = 0.5;
+            shell.add(leftArm);
+
+            const rightArm = new THREE.Mesh(flipperGeo, skinMat);
+            rightArm.position.set(-1.5, -0.8, 1.2);
+            rightArm.rotation.y = Math.PI - 0.5;
+            shell.add(rightArm);
+
+            const leftRLeg = new THREE.Mesh(flipperGeo, skinMat);
+            leftRLeg.position.set(1.5, -0.8, -1.2);
+            leftRLeg.rotation.y = -0.5;
+            shell.add(leftRLeg);
+
+            const rightRLeg = new THREE.Mesh(flipperGeo, skinMat);
+            rightRLeg.position.set(-1.5, -0.8, -1.2);
+            rightRLeg.rotation.y = Math.PI + 0.5;
+            shell.add(rightRLeg);
+
+            body.add(riderGroup);
+            
+            // Clean un-clipped FP Camera POV
+            fpCamera.position.set(0, 2.8, -1.0); 
+            fpCamera.lookAt(0, -0.5, 15);
+            tHead.add(fpCamera);
+
+            outerBullGroup.add(bullGroup);
+            
+            bullGroup.userData = { body, head, flLeg, frLeg, blLeg, brLeg };
+            riderGroup.userData = { torso: shell, leftArm, rightArm, rHead: tHead, rightRLeg, leftRLeg };
+        }
+
+        let gameState = 'MENU';
+        let score = 0;
+        let stamina = 100;
+        let baseDifficultyMultiplier = 1.0;
+        let difficultyMultiplier = 1.0;
+        let phaseTimer = 0;
+        const PHASE_DURATION = 12;
+
+        const globalRhythms = [
+            [0.5, 0.5, 0.5], 
+            [0.3, 0.3, 0.8], 
+            [0.2, 0.2, 0.2, 1.0],
+            [0.6, 0.2, 0.4, 0.4], 
+            [0.8, 0.4, 0.8]  
+        ];
+        let currentRhythmPattern = globalRhythms[0];
+        let rhythmIndex = 0;
+
+        function getNextRhythmTime() {
+            const time = currentRhythmPattern[rhythmIndex];
+            rhythmIndex = (rhythmIndex + 1) % currentRhythmPattern.length;
+            return time / (difficultyMultiplier * 0.8);
+        }
+
+        function setRandomRhythm() {
+            currentRhythmPattern = globalRhythms[Math.floor(Math.random() * globalRhythms.length)];
+            rhythmIndex = 0;
+        }
+
+        // Phase Variables
+        let p1Angle = 0, p1Speed = 0.05, p1TargetAngle = -Math.PI / 2, p1Tolerance = 0.6;
+        let p1TargetAngle2 = Math.PI / 2;
+        let p1JerkTimer = 0, p1JerkActive = false;
+        let p1OrbitAngle = 0, p1OrbitSpeed = 0.5;
+        
+        let fallingArrows = [], arrowSpawnTimer = 0;
+        const arrowTypes = ['left', 'up', 'down', 'right'];
+        const arrowSymbols = {'left':'←', 'up':'↑', 'down':'↓', 'right':'→'};
+        const arrowPositions = {'left':'12.5%', 'up':'37.5%', 'down':'62.5%', 'right':'87.5%'}; 
+        const ARROW_SPEED = 100;
+        
+        let alignTargetX = 50, alignTargetY = 50;
+        let alignPlayerX = 50, alignPlayerY = 50;
+        let alignTime = 0;
+        
+        let fishTimer = 0, fishList = [];
+        let fishingAlt = false; // Alternating rhythm flag
+        const FISH_TARGET_ANGLE = -Math.PI / 2;
+        const FISH_START_ANGLE = Math.PI / 2;
+        
+        let shrinkRingScale = 3, shrinkTargetScale = 1;
+        let shrinkTimer = 0, ringActive = false;
+        
+        let semiBallAngle = 0, semiZoneAngle = 0, semiTime = 0;
+        
+        let spikeTimer = 0, fallingSpikes = [], currentSpikeLane = 1;
+        const lanePercentages = ['16.6%', '50%', '83.3%'];
+        const SPIKE_SPEED = 120;
+        
+        let squareJumpers = [];
+        let squareSyncTimer = 0;
+        let squareBeatCount = 0;
+
+        // UI Variables
+        const bgmPlayer = document.getElementById('bgm-player');
+        let highScores = JSON.parse(localStorage.getItem('bullRiderScores')) || [
+            {name: 'BOB', score: 5000}, {name: 'TEX', score: 4000}, {name: 'SUE', score: 3000}
+        ];
+
+        function animateBull(time) {
+            if(gameState === 'MENU' || isRagdolling) return;
+
+            const b = bullGroup.userData;
+            const r = riderGroup.userData;
+            const speed = time * (6 + difficultyMultiplier);
+            
+            b.body.rotation.x = Math.sin(speed) * 0.3;
+            b.body.rotation.y = Math.cos(speed * 0.8) * 0.2;
+            b.body.rotation.z = Math.sin(speed * 1.2) * 0.15;
+            b.body.position.y = 6 + Math.max(0, Math.sin(speed * 2.5) * 3);
+            b.head.rotation.x = -Math.sin(speed) * 0.4;
+
+            if(b.body.position.y > 6.5) {
+                b.flLeg.rotation.x = -0.5 + Math.sin(speed*4)*0.3;
+                b.frLeg.rotation.x = -0.5 + Math.cos(speed*4)*0.3;
+                b.blLeg.rotation.x = 0.5 + Math.sin(speed*4)*0.3;
+                b.brLeg.rotation.x = 0.5 + Math.cos(speed*4)*0.3;
+            } else {
+                 b.flLeg.rotation.x = 0; b.frLeg.rotation.x = 0;
+                 b.blLeg.rotation.x = 0; b.brLeg.rotation.x = 0;
+            }
+
+            r.torso.rotation.x = -b.body.rotation.x * 0.9;
+            r.torso.rotation.z = -b.body.rotation.z * 0.9;
+            r.leftArm.rotation.z = Math.cos(speed*1.5)*0.3; 
+            r.rightArm.rotation.z = -Math.cos(speed*1.5)*0.3;
+            
+            if(activeCamera === fpCamera) {
+                fpCamera.rotation.z = (Math.random() - 0.5) * 0.08 * difficultyMultiplier;
+            }
+        }
+
+        function updateRagdoll(delta) {
+            if(!isRagdolling) return;
+            const r = riderGroup;
+            r.position.addScaledVector(riderVelocity, delta);
+            riderVelocity.y -= 80 * delta; // Gravity
+            
+            // Floor bounce
+            if (r.position.y <= 0) {
+                r.position.y = 0;
+                riderVelocity.y *= -0.5; // Bounce dampening
+                riderVelocity.x *= 0.8;
+                riderVelocity.z *= 0.8;
+            }
+            
+            r.rotation.x += 5 * delta;
+            r.rotation.y += 4 * delta;
+            r.rotation.z += 6 * delta;
+        }
+
+        function updatePhase1(delta) {
+            p1JerkTimer -= delta;
+            if (p1JerkTimer <= 0) {
+                p1JerkActive = !p1JerkActive;
+                p1JerkTimer = p1JerkActive ? (Math.random() * 0.3 + 0.1) : (Math.random() * 1.5 + 0.5);
+            }
+            
+            let speedMod = p1JerkActive ? (Math.random() > 0.5 ? 2.5 : -1.5) : 1;
+            p1Angle += p1Speed * difficultyMultiplier * speedMod * 60 * delta; 
+            
+            p1OrbitAngle += p1OrbitSpeed * delta * difficultyMultiplier;
+            const orbitRadius = 30; 
+            const containerX = Math.cos(p1OrbitAngle * 1.3) * orbitRadius;
+            const containerY = Math.sin(p1OrbitAngle * 0.9) * orbitRadius;
+            
+            document.getElementById('rhythm-container').style.transform = `translate(calc(-50% + ${containerX}px), calc(-50% + ${containerY}px))`;
+
+            const radius = 50; 
+            const x = Math.cos(p1Angle) * radius;
+            const y = Math.sin(p1Angle) * radius;
+            document.getElementById('moving-marker').style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+            
+            p1Tolerance = Math.max(0.2, 0.6 - (difficultyMultiplier * 0.1));
+            stamina -= 10 * delta * difficultyMultiplier;
+        }
+
+        function updatePhase2(delta) {
+            stamina -= 15 * delta * difficultyMultiplier;
+            arrowSpawnTimer -= delta;
+            
+            if (arrowSpawnTimer <= 0) {
+                const type = arrowTypes[Math.floor(Math.random() * arrowTypes.length)];
+                const arrowEl = document.createElement('div');
+                arrowEl.className = `falling-arrow arrow-${type}`;
+                arrowEl.innerText = arrowSymbols[type];
+                arrowEl.style.top = '-40px'; 
+                arrowEl.style.left = arrowPositions[type];
+                
+                document.getElementById('falling-arrows-container').appendChild(arrowEl);
+                fallingArrows.push({ element: arrowEl, y: -40, type: type, active: true });
+                
+                arrowSpawnTimer = getNextRhythmTime();
+            }
+
+            const targetY = 200; 
+            for (let i = fallingArrows.length - 1; i >= 0; i--) {
+                let arrow = fallingArrows[i];
+                if (!arrow.active) continue;
+
+                arrow.y += ARROW_SPEED * delta * (1 + (difficultyMultiplier - 1)*0.5);
+                arrow.element.style.top = `${arrow.y}px`;
+
+                if (arrow.y > targetY + 40) {
+                    arrow.active = false;
+                    arrow.element.remove();
+                    fallingArrows.splice(i, 1);
+                    applyMiss("MISS", getUIX(document.getElementById(`target-${arrow.type}`)), getUIY(document.getElementById(`target-${arrow.type}`)));
+                }
+            }
+        }
+
+        function updatePhase3(delta) {
+            const playerSpeed = 100 * delta; 
+            if(keysDown['ArrowLeft']) alignPlayerX -= playerSpeed;
+            if(keysDown['ArrowRight']) alignPlayerX += playerSpeed;
+            if(keysDown['ArrowUp']) alignPlayerY -= playerSpeed;
+            if(keysDown['ArrowDown']) alignPlayerY += playerSpeed;
+            
+            alignPlayerX = Math.max(0, Math.min(100, alignPlayerX));
+            alignPlayerY = Math.max(0, Math.min(100, alignPlayerY));
+
+            alignTime += delta * difficultyMultiplier * 0.5;
+            
+            alignTargetX = 50 + Math.sin(alignTime * 1.5) * 40 + Math.cos(alignTime * 2.5) * 10;
+            alignTargetY = 50 + Math.cos(alignTime * 1.8) * 40 + Math.sin(alignTime * 3) * 10;
+            alignTargetX = Math.max(10, Math.min(90, alignTargetX));
+            alignTargetY = Math.max(10, Math.min(90, alignTargetY));
+
+            const tEl = document.getElementById('align-target');
+            tEl.style.left = `${alignTargetX}%`;
+            tEl.style.top = `${alignTargetY}%`;
+            document.getElementById('align-player').style.left = `${alignPlayerX}%`;
+            document.getElementById('align-player').style.top = `${alignPlayerY}%`;
+
+            const dx = alignTargetX - alignPlayerX;
+            const dy = alignTargetY - alignPlayerY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if(dist < 15) {
+                stamina = Math.min(100, stamina + 20 * delta);
+                score += Math.floor(10 * delta * difficultyMultiplier);
+                tEl.style.borderColor = '#4caf50'; 
+            } else {
+                stamina -= 5 * delta * difficultyMultiplier;
+                tEl.style.borderColor = '#7F0019'; 
+            }
+        }
+
+        function updatePhase4(delta) {
+            stamina -= 10 * delta * difficultyMultiplier;
+            fishTimer -= delta;
+            
+            if (fishTimer <= 0) {
+                const fishEl = document.createElement('div');
+                fishEl.className = 'swimming-fish';
+                document.getElementById('fish-container').appendChild(fishEl);
+                fishList.push({ el: fishEl, angle: FISH_START_ANGLE, active: true });
+                
+                fishingAlt = !fishingAlt;
+                let rhythmMult = fishingAlt ? 0.6 : 1.4; // Alternate rhythm pattern
+                fishTimer = getNextRhythmTime() * rhythmMult;
+            }
+            
+            for (let i = fishList.length - 1; i >= 0; i--) {
+                let fish = fishList[i];
+                if (!fish.active) continue;
+
+                fish.angle -= 1.8 * delta * difficultyMultiplier;
+                
+                const radius = 80; 
+                const x = 100 + Math.cos(fish.angle) * radius; 
+                const y = 100 + Math.sin(fish.angle) * radius;
+                
+                const rotation = fish.angle + Math.PI; 
+                fish.el.style.left = `${x}px`;
+                fish.el.style.top = `${y}px`;
+                fish.el.style.transform = `translate(-50%, -50%) rotate(${rotation}rad)`;
+
+                if (fish.angle < FISH_TARGET_ANGLE - 0.4) {
+                    fish.active = false;
+                    fish.el.remove();
+                    fishList.splice(i, 1);
+                    applyMiss("ESCAPED!", getUIX(document.getElementById('catch-zone')), getUIY(document.getElementById('catch-zone')) + 50);
+                }
+            }
+        }
+
+        function updatePhase5(delta) {
+            stamina -= 10 * delta * difficultyMultiplier;
+            shrinkTimer -= delta;
+
+            const ringEl = document.getElementById('shrink-ring');
+
+            if (!ringActive && shrinkTimer <= 0) {
+                ringActive = true;
+                shrinkRingScale = 3.0 + (Math.random() * 0.3); 
+                ringEl.style.display = 'block';
+                shrinkTimer = getNextRhythmTime() * 1.5; 
+            }
+
+            if (ringActive) {
+                shrinkRingScale -= 2.0 * delta * difficultyMultiplier;
+
+                if (shrinkRingScale < 0.2) {
+                    applyMiss("MISS", getUIX(document.getElementById('shrink-target')), getUIY(document.getElementById('shrink-target')));
+                    ringActive = false;
+                    ringEl.style.display = 'none';
+                } else {
+                    ringEl.style.transform = `translate(-50%, -50%) scale(${shrinkRingScale})`;
+                }
+            }
+        }
+
+        function updatePhase6(delta) {
+            const playerSpeed = 150 * delta;
+            if(keysDown['ArrowLeft']) semiBallAngle -= playerSpeed;
+            if(keysDown['ArrowRight']) semiBallAngle += playerSpeed;
+            semiBallAngle = Math.max(-85, Math.min(85, semiBallAngle)); 
+
+            semiTime += delta * difficultyMultiplier;
+            semiZoneAngle = Math.sin(semiTime * 1.2) * 45 + Math.cos(semiTime * 2.1) * 20;
+
+            document.getElementById('semi-zone-pivot').style.transform = `rotate(${semiZoneAngle}deg)`;
+            document.getElementById('semi-ball-pivot').style.transform = `rotate(${semiBallAngle}deg)`;
+
+            const dist = Math.abs(semiBallAngle - semiZoneAngle);
+            const semiZoneEl = document.getElementById('semi-zone');
+            
+            if (dist < 20) { 
+                stamina = Math.min(100, stamina + 20 * delta);
+                score += Math.floor(10 * delta * difficultyMultiplier);
+                semiZoneEl.style.backgroundColor = 'rgba(76, 175, 80, 0.5)'; 
+            } else {
+                stamina -= 15 * delta * difficultyMultiplier;
+                semiZoneEl.style.backgroundColor = 'rgba(127, 0, 25, 0.5)'; 
+            }
+        }
+
+        function updatePhase7(delta) {
+            stamina -= 15 * delta * difficultyMultiplier;
+            spikeTimer -= delta;
+
+            if (spikeTimer <= 0) {
+                const lane = Math.floor(Math.random() * 3);
+                const spikeEl = document.createElement('div');
+                spikeEl.className = 'falling-spike';
+                spikeEl.style.left = lanePercentages[lane];
+                spikeEl.style.top = '-40px';
+                
+                document.getElementById('spikes-minigame-container').appendChild(spikeEl);
+                fallingSpikes.push({ element: spikeEl, y: -40, lane: lane, active: true });
+                
+                spikeTimer = getNextRhythmTime();
+            }
+
+            const targetY = 240; 
+            for (let i = fallingSpikes.length - 1; i >= 0; i--) {
+                let spike = fallingSpikes[i];
+                if (!spike.active) continue;
+
+                spike.y += SPIKE_SPEED * delta * (1 + (difficultyMultiplier - 1)*0.5);
+                spike.element.style.top = `${spike.y}px`;
+
+                if (spike.y > targetY + 20) {
+                    spike.active = false;
+                    spike.element.remove();
+                    fallingSpikes.splice(i, 1);
+                    applyMiss("SPIKED!", getUIX(document.getElementById('spike-hammer')), getUIY(document.getElementById('spike-hit-zone')));
+                }
+            }
+        }
+        
+        function updatePhase8(delta) {
+            stamina -= 10 * delta * difficultyMultiplier;
+            
+            for(let i=0; i<squareJumpers.length; i++) {
+                let sq = squareJumpers[i];
+                if(sq.isJumping) {
+                    sq.y += sq.vy * delta;
+                    sq.vy -= 800 * delta; 
+                    if(sq.y <= 0) {
+                        sq.y = 0;
+                        sq.isJumping = false;
+                    }
+                    sq.el.style.bottom = `${sq.y + 10}px`;
+                }
+            }
+
+            squareSyncTimer -= delta;
+            if(squareSyncTimer <= 0) {
+                squareBeatCount++;
+                let jumpAll = (squareBeatCount % 4 === 0); // Every 4th beat, all jump
+
+                for(let i=0; i<4; i++) {
+                    if(jumpAll || Math.random() > 0.5) {
+                        if(!squareJumpers[i].isJumping) {
+                            squareJumpers[i].isJumping = true;
+                            squareJumpers[i].vy = 350 + (Math.random() * 50 - 25);
+                            if(jumpAll) squareJumpers[i].vy = 400; // Perfect uniform height
+                        }
+                    }
+                }
+                squareSyncTimer = getNextRhythmTime() * 1.5;
+            }
+        }
+
+        function handlePhase1Input() {
+            let currentNorm = p1Angle % (Math.PI * 2);
+            if (currentNorm < 0) currentNorm += Math.PI * 2;
+            
+            let t1 = p1TargetAngle % (Math.PI * 2);
+            if (t1 < 0) t1 += Math.PI * 2;
+            let diff1 = Math.abs(currentNorm - t1);
+            if (diff1 > Math.PI) diff1 = Math.PI * 2 - diff1;
+
+            let t2 = p1TargetAngle2 % (Math.PI * 2);
+            if (t2 < 0) t2 += Math.PI * 2;
+            let diff2 = Math.abs(currentNorm - t2);
+            if (diff2 > Math.PI) diff2 = Math.PI * 2 - diff2;
+
+            let minDiff = Math.min(diff1, diff2);
+            let activeTargetEl = minDiff === diff1 ? document.getElementById('target-zone') : document.getElementById('target-zone-2');
+            
+            const px = getUIX(activeTargetEl);
+            const py = getUIY(activeTargetEl);
+
+            if (minDiff < p1Tolerance / 2) {
+                applyHit(25, 150, "PERFECT!", px, py);
+            } else if (minDiff < p1Tolerance) {
+                applyHit(10, 50, "GOOD", px, py);
+            } else {
+                applyMiss("MISS", px, py);
+            }
+        }
+
+        function handlePhase2Input(dir) {
+            const targetY = 200;
+            const HIT_WINDOW = 40;
+            let targetIdx = -1, lowestY = -100;
+
+            for (let i = 0; i < fallingArrows.length; i++) {
+                if (fallingArrows[i].active && fallingArrows[i].type === dir) {
+                    if (fallingArrows[i].y > lowestY) { 
+                        lowestY = fallingArrows[i].y; 
+                        targetIdx = i; 
+                    }
+                }
+            }
+
+            const targetEl = document.getElementById(`target-${dir}`);
+            const rx = getUIX(targetEl);
+            const ry = getUIY(targetEl);
+
+            if (targetIdx !== -1) {
+                const diff = Math.abs(fallingArrows[targetIdx].y - targetY);
+                if (diff < HIT_WINDOW) {
+                    applyHit(20, 150, "PERFECT!", rx, ry);
+                    fallingArrows[targetIdx].active = false;
+                    fallingArrows[targetIdx].element.remove();
+                    fallingArrows.splice(targetIdx, 1);
+                } else {
+                    applyMiss("POOR TIMING", rx, ry);
+                }
+            } else {
+                applyMiss("WRONG ARROW", rx, ry);
+            }
+        }
+        
+        function handlePhase4Input() {
+            const HIT_WINDOW = 0.4;
+            let targetIdx = -1;
+            let closestDiff = 999;
+
+            for (let i = 0; i < fishList.length; i++) {
+                if (fishList[i].active) {
+                    const diff = Math.abs(fishList[i].angle - FISH_TARGET_ANGLE);
+                    if (diff < closestDiff) {
+                        closestDiff = diff;
+                        targetIdx = i;
+                    }
+                }
+            }
+
+            const catchZoneEl = document.getElementById('catch-zone');
+            const cx = getUIX(catchZoneEl);
+            const cy = getUIY(catchZoneEl);
+
+            if (targetIdx !== -1 && closestDiff < HIT_WINDOW) {
+                if (closestDiff < HIT_WINDOW / 2) {
+                    applyHit(25, 150, "CATCH!", cx, cy);
+                } else {
+                    applyHit(10, 50, "GOOD", cx, cy);
+                }
+                fishList[targetIdx].active = false;
+                fishList[targetIdx].el.remove();
+                fishList.splice(targetIdx, 1);
+                
+                const rodEl = document.getElementById('fishing-rod');
+                rodEl.style.backgroundColor = "#7F0019";
+                rodEl.style.width = "4px";
+                setTimeout(() => {
+                    rodEl.style.backgroundColor = "#333";
+                    rodEl.style.width = "2px";
+                }, 100);
+
+            } else {
+                stamina -= 10;
+                applyMiss("MISS", cx, cy);
+            }
+        }
+        
+        function handlePhase5Input() {
+            const tx = getUIX(document.getElementById('shrink-target'));
+            const ty = getUIY(document.getElementById('shrink-target'));
+
+            if (!ringActive) {
+                stamina -= 10;
+                applyMiss("EARLY!", tx, ty);
+                return;
+            }
+
+            const diff = Math.abs(shrinkRingScale - 1.0);
+            
+            if (diff < 0.25) {
+                applyHit(30, 200, "PERFECT!", tx, ty);
+            } else if (diff < 0.6) {
+                applyHit(10, 50, "GOOD", tx, ty);
+            } else {
+                applyMiss("MISS", tx, ty);
+            }
+            
+            ringActive = false;
+            document.getElementById('shrink-ring').style.display = 'none';
+        }
+
+        function handlePhase7Space() {
+            const targetY = 220;
+            const HIT_WINDOW = 40;
+            let targetIdx = -1, lowestY = -100;
+
+            for (let i = 0; i < fallingSpikes.length; i++) {
+                if (fallingSpikes[i].active && fallingSpikes[i].lane === currentSpikeLane) {
+                    if (fallingSpikes[i].y > lowestY) { 
+                        lowestY = fallingSpikes[i].y; 
+                        targetIdx = i; 
+                    }
+                }
+            }
+
+            const hammerEl = document.getElementById('spike-hammer');
+            const hx = getUIX(hammerEl);
+            const hy = getUIY(hammerEl);
+
+            if (targetIdx !== -1) {
+                const diff = Math.abs(fallingSpikes[targetIdx].y - targetY);
+                if (diff < HIT_WINDOW) {
+                    applyHit(20, 150, "WHACK!", hx, hy - 20);
+                    fallingSpikes[targetIdx].active = false;
+                    fallingSpikes[targetIdx].element.remove();
+                    fallingSpikes.splice(targetIdx, 1);
+                    
+                    hammerEl.style.bottom = "25px";
+                    setTimeout(() => hammerEl.style.bottom = "10px", 100);
+                } else {
+                    applyMiss("TOO EARLY", hx, hy - 20);
+                }
+            } else {
+                stamina -= 10;
+                applyMiss("MISS", hx, hy - 20);
+            }
+        }
+        
+        function handlePhase8Input() {
+            let allInZone = true;
+            let anyJumping = false;
+            for(let i=0; i<squareJumpers.length; i++) {
+                if(squareJumpers[i].isJumping) anyJumping = true;
+                // Target line is at bottom 90. Squares are 30px tall, drawn from bottom.
+                // Sweet spot for y is ~60 to ~90
+                if(squareJumpers[i].y < 60 || squareJumpers[i].y > 90) {
+                    allInZone = false;
+                }
+            }
+
+            let tx = getUIX(document.getElementById('squares-minigame-container'));
+            let ty = getUIY(document.getElementById('squares-minigame-container')) - 50;
+
+            if(anyJumping && allInZone) {
+                applyHit(30, 200, "SYNC!", tx, ty);
+                squareJumpers.forEach(sq => { sq.vy = -600; }); // slam down
+            } else {
+                stamina -= 15;
+                applyMiss("MISS", tx, ty);
+            }
+        }
+
+        function getUIX(el) {
+            if(!el) return window.innerWidth/2;
+            const rect = el.getBoundingClientRect();
+            return rect.left + rect.width/2;
+        }
+
+        function getUIY(el) {
+            if(!el) return window.innerHeight/2;
+            const rect = el.getBoundingClientRect();
+            return rect.top + rect.height/2;
+        }
+
+        function triggerGreenFlash() {
+            const flash = document.getElementById('flash-overlay');
+            if (!flash) return;
+            flash.classList.add('flash-active');
+            setTimeout(() => {
+                flash.classList.remove('flash-active');
+            }, 100); 
+        }
+
+        function applyHit(stamGain, scoreGain, text, x, y) {
+            stamina = Math.min(100, stamina + stamGain);
+            score += Math.floor(scoreGain * difficultyMultiplier);
+            spawnFloatingText(text, '#4caf50', x, y);
+            triggerGreenFlash();
+        }
+
+        function applyMiss(text, x, y) {
+            stamina -= 15;
+            spawnFloatingText(text, '#7F0019', x, y);
+        }
+
+        function spawnFloatingText(text, color, x, y) {
+            const el = document.createElement('div');
+            el.className = 'feedback-text';
+            el.style.color = color;
+            el.innerText = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.getElementById('ui-layer').appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function switchPhase(newPhase) {
+            gameState = newPhase;
+            phaseTimer = 0;
+            difficultyMultiplier = Math.min(3.5, difficultyMultiplier + 0.2); // Cap diff
+
+            // Cleanup all UI
+            document.getElementById('rhythm-container').style.display = 'none';
+            document.getElementById('instruction-text').classList.add('hidden');
+            document.getElementById('arrow-minigame-container').style.display = 'none';
+            document.getElementById('alignment-minigame-container').style.display = 'none';
+            document.getElementById('fishing-minigame-container').style.display = 'none';
+            document.getElementById('shrinking-minigame-container').style.display = 'none';
+            document.getElementById('semicircle-minigame-container').style.display = 'none';
+            document.getElementById('spikes-minigame-container').style.display = 'none';
+            document.getElementById('squares-minigame-container').style.display = 'none';
+
+            const pInd = document.getElementById('phase-indicator');
+            pInd.style.display = 'block';
+
+            if (newPhase === 'PHASE1') {
+                activeCamera = isoCamera;
+                document.getElementById('rhythm-container').style.display = 'block';
+                document.getElementById('instruction-text').classList.remove('hidden');
+                document.getElementById('instruction-text').innerText = "SPACE to grip!";
+                pInd.innerText = "PHASE 1: GRIP (SPACE)";
+                pInd.style.color = "#7F0019"; 
+            } else if (newPhase === 'PHASE2') {
+                activeCamera = fpCamera;
+                document.getElementById('arrow-minigame-container').style.display = 'block';
+                pInd.innerText = "PHASE 2: BALANCE (ARROWS)";
+                pInd.style.color = "#4a4a4a"; 
+                document.getElementById('falling-arrows-container').innerHTML = '';
+                fallingArrows = [];
+                setRandomRhythm();
+                arrowSpawnTimer = getNextRhythmTime();
+            } else if (newPhase === 'PHASE3') {
+                activeCamera = faceCamera; 
+                document.getElementById('alignment-minigame-container').style.display = 'block';
+                pInd.innerText = "PHASE 3: SYNC (HOLD ARROWS)";
+                pInd.style.color = "#8b5a2b"; 
+            } else if (newPhase === 'PHASE4') {
+                activeCamera = spinCamera; 
+                document.getElementById('fishing-minigame-container').style.display = 'block';
+                document.getElementById('instruction-text').classList.remove('hidden');
+                document.getElementById('instruction-text').innerText = "SPACE to reel!";
+                pInd.innerText = "PHASE 4: FISHING (SPACE)";
+                pInd.style.color = "#4a707a"; 
+                document.getElementById('fish-container').innerHTML = '';
+                fishList = [];
+                fishingAlt = false;
+                setRandomRhythm();
+                fishTimer = getNextRhythmTime() * 1.5;
+            } else if (newPhase === 'PHASE5') {
+                activeCamera = isoCamera;
+                document.getElementById('shrinking-minigame-container').style.display = 'block';
+                document.getElementById('instruction-text').classList.remove('hidden');
+                document.getElementById('instruction-text').innerText = "SPACE to focus!";
+                pInd.innerText = "PHASE 5: FOCUS (SPACE)";
+                pInd.style.color = "#7F0019"; 
+                setRandomRhythm();
+                shrinkTimer = getNextRhythmTime() * 1.5;
+                ringActive = false;
+                document.getElementById('shrink-ring').style.display = 'none';
+            } else if (newPhase === 'PHASE6') {
+                activeCamera = fpCamera; 
+                document.getElementById('semicircle-minigame-container').style.display = 'block';
+                pInd.innerText = "PHASE 6: TENSION (HOLD ARROWS)";
+                pInd.style.color = "#4a4a4a"; 
+                semiBallAngle = 0;
+            } else if (newPhase === 'PHASE7') {
+                activeCamera = isoCamera; 
+                document.getElementById('spikes-minigame-container').style.display = 'block';
+                pInd.innerText = "PHASE 7: DEFLECT (ARROWS + SPACE)";
+                pInd.style.color = "#7F0019"; 
+                document.getElementById('spikes-minigame-container').querySelectorAll('.falling-spike').forEach(el => el.remove());
+                fallingSpikes = [];
+                currentSpikeLane = 1;
+                document.getElementById('spike-hammer').style.left = lanePercentages[currentSpikeLane];
+                setRandomRhythm();
+                spikeTimer = getNextRhythmTime();
+            } else if (newPhase === 'PHASE8') {
+                activeCamera = faceCamera;
+                document.getElementById('squares-minigame-container').style.display = 'block';
+                document.getElementById('instruction-text').classList.remove('hidden');
+                document.getElementById('instruction-text').innerText = "SPACE when aligned!";
+                pInd.innerText = "PHASE 8: ALIGN (SPACE)";
+                pInd.style.color = "#8b5a2b"; 
+                
+                document.getElementById('squares-minigame-container').querySelectorAll('.jumping-square').forEach((el, index) => {
+                    el.style.bottom = '10px';
+                    squareJumpers[index] = { el: el, y: 0, vy: 0, isJumping: false };
+                });
+                setRandomRhythm();
+                squareSyncTimer = getNextRhythmTime();
+                squareBeatCount = 0;
+            }
+        }
+
+        function setGameOver() {
+            gameState = 'GAMEOVER';
+            bgmPlayer.pause();
+            
+            isRagdolling = true;
+            scene.attach(riderGroup);
+            riderVelocity.set((Math.random()-0.5)*30, 40, (Math.random()-0.5)*30);
+            
+            document.getElementById('rhythm-container').style.display = 'none';
+            document.getElementById('arrow-minigame-container').style.display = 'none';
+            document.getElementById('alignment-minigame-container').style.display = 'none';
+            document.getElementById('fishing-minigame-container').style.display = 'none';
+            document.getElementById('shrinking-minigame-container').style.display = 'none';
+            document.getElementById('semicircle-minigame-container').style.display = 'none';
+            document.getElementById('spikes-minigame-container').style.display = 'none';
+            document.getElementById('squares-minigame-container').style.display = 'none';
+            
+            document.getElementById('instruction-text').classList.add('hidden');
+            document.getElementById('phase-indicator').style.display = 'none';
+            document.getElementById('mode-indicator').classList.add('hidden');
+            
+            setTimeout(() => {
+                document.getElementById('game-over-overlay').classList.remove('hidden');
+                document.getElementById('final-score').innerText = `FINAL SCORE: ${score}`;
+                if(!practiceMode) {
+                    checkHighScore();
+                } else {
+                    document.getElementById('restart-btn').classList.remove('hidden');
+                }
+                renderLeaderboard();
+            }, 1500); 
+        }
+
+        function checkHighScore() {
+            const entryDiv = document.getElementById('high-score-entry');
+            const lowestScore = highScores.length < 5 ? 0 : highScores[highScores.length-1].score;
+            
+            if(score > lowestScore) {
+                entryDiv.classList.remove('hidden');
+                document.getElementById('restart-btn').classList.add('hidden'); 
+            } else {
+                entryDiv.classList.add('hidden');
+                document.getElementById('restart-btn').classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('save-score-btn').addEventListener('click', () => {
+            let name = document.getElementById('name-input').value || '???';
+            highScores.push({name: name, score: score});
+            highScores.sort((a,b) => b.score - a.score);
+            if(highScores.length > 5) highScores.pop();
+            
+            localStorage.setItem('bullRiderScores', JSON.stringify(highScores));
+            
+            document.getElementById('high-score-entry').classList.add('hidden');
+            document.getElementById('restart-btn').classList.remove('hidden');
+            renderLeaderboard();
+        });
+
+        function renderLeaderboard() {
+            let html = '<table class="w-full max-w-xs text-left"><tr><th class="text-gray-800 border-b border-gray-400 pb-2">RANK</th><th class="text-gray-800 border-b border-gray-400 pb-2">NAME</th><th class="text-gray-800 border-b border-gray-400 pb-2 text-right">SCORE</th></tr>';
+            highScores.forEach((entry, idx) => {
+                html += `<tr><td>${idx+1}</td><td>${entry.name}</td><td class="text-right">${entry.score}</td></tr>`;
+            });
+            html += '</table>';
+            document.getElementById('leaderboard-table').innerHTML = html;
+        }
+
+        function startGame(forcedPhase = null) {
+            score = 0; stamina = 100; 
+            practiceMode = (forcedPhase !== null);
+            difficultyMultiplier = baseDifficultyMultiplier;
+            
+            if(practiceMode) {
+                document.getElementById('mode-indicator').classList.remove('hidden');
+            } else {
+                document.getElementById('mode-indicator').classList.add('hidden');
+            }
+            
+            isRagdolling = false;
+            bullGroup.userData.body.add(riderGroup); 
+            riderGroup.position.set(0,0,0);
+            riderGroup.rotation.set(0,0,0);
+            
+            const p = riderGroup.userData;
+            p.leftArm.rotation.set(0, 0.5, 0);
+            p.rightArm.rotation.set(0, Math.PI - 0.5, 0);
+            p.leftRLeg.rotation.set(0, -0.5, 0);
+            p.rightRLeg.rotation.set(0, Math.PI + 0.5, 0);
+            
+            document.getElementById('message-overlay').classList.add('hidden');
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            
+            if(bgmPlayer.src) {
+                bgmPlayer.currentTime = 0;
+                bgmPlayer.play().catch(e=>console.log("Audio play blocked"));
+            }
+            
+            switchPhase(forcedPhase ? forcedPhase : 'PHASE1');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(0.05, clock.getDelta()); // Cap delta to prevent huge jumps
+            const elapsedTime = clock.getElapsedTime();
+
+            if (gameState.startsWith('PHASE')) {
+                phaseTimer += delta;
+                
+                if (phaseTimer >= PHASE_DURATION) {
+                    if (practiceMode) {
+                        phaseTimer = 0;
+                        switchPhase(gameState); // Restart same phase
+                    } else {
+                        let phases = ['PHASE1', 'PHASE2', 'PHASE3', 'PHASE4', 'PHASE5', 'PHASE6', 'PHASE7', 'PHASE8'];
+                        phases = phases.filter(p => p !== gameState); // Remove current
+                        let nextPhase = phases[Math.floor(Math.random() * phases.length)];
+                        switchPhase(nextPhase);
+                    }
+                }
+
+                if (gameState === 'PHASE1') updatePhase1(delta);
+                else if (gameState === 'PHASE2') updatePhase2(delta);
+                else if (gameState === 'PHASE3') updatePhase3(delta);
+                else if (gameState === 'PHASE4') updatePhase4(delta);
+                else if (gameState === 'PHASE5') updatePhase5(delta);
+                else if (gameState === 'PHASE6') updatePhase6(delta);
+                else if (gameState === 'PHASE7') updatePhase7(delta);
+                else if (gameState === 'PHASE8') updatePhase8(delta);
+
+                if (stamina <= 0) setGameOver();
+                
+                document.getElementById('score-display').innerText = `SCORE: ${score}`;
+                document.getElementById('stamina-bar').style.width = `${Math.max(0, stamina)}%`;
+                
+                const sBar = document.getElementById('stamina-bar');
+                if (stamina > 50) sBar.style.background = '#7F0019'; 
+                else if (stamina > 25) sBar.style.background = '#8b5a2b'; 
+                else sBar.style.background = '#c23b22'; 
+            }
+
+            animateBull(elapsedTime);
+            updateRagdoll(delta);
+            
+            if (gameState !== 'GAMEOVER' && !isRagdolling) {
+                const runSpeed = elapsedTime * (0.8 + difficultyMultiplier * 0.1);
+                const px = Math.sin(runSpeed) * 20;
+                const pz = Math.cos(runSpeed * 0.7) * 15;
+                outerBullGroup.position.set(px, 0, pz);
+                
+                const nextX = Math.sin(runSpeed + 0.1) * 20;
+                const nextZ = Math.cos((runSpeed + 0.1) * 0.7) * 15;
+                outerBullGroup.lookAt(nextX, 0, nextZ);
+
+                isoCamera.position.set(px + 25, 20, pz + 25);
+                isoCamera.lookAt(px, 3, pz);
+                
+                if (activeCamera === faceCamera) {
+                    const dirX = nextX - px;
+                    const dirZ = nextZ - pz;
+                    const len = Math.max(0.001, Math.sqrt(dirX*dirX + dirZ*dirZ)); 
+                    const nx = dirX / len;
+                    const nz = dirZ / len;
+                    
+                    faceCamera.position.set(px + nx * 20, 10, pz + nz * 20);
+                    faceCamera.lookAt(px, 5, pz);
+                } else if (activeCamera === spinCamera) {
+                    const spinSpeed = elapsedTime * 1.5;
+                    const camRadius = 25;
+                    spinCamera.position.set(px + Math.sin(spinSpeed) * camRadius, 15, pz + Math.cos(spinSpeed) * camRadius);
+                    spinCamera.lookAt(px, 6, pz);
+                }
+            }
+            
+            renderer.render(scene, activeCamera);
+        }
+
+        const keysDown = {};
+        window.addEventListener('keydown', (e) => {
+            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+                if(e.target.tagName !== 'INPUT') e.preventDefault(); 
+            }
+            keysDown[e.code] = true;
+            if (e.repeat) return; 
+
+            if (gameState === 'PHASE1' && e.code === 'Space') handlePhase1Input();
+            else if (gameState === 'PHASE4' && e.code === 'Space') handlePhase4Input();
+            else if (gameState === 'PHASE5' && e.code === 'Space') handlePhase5Input();
+            else if (gameState === 'PHASE8' && e.code === 'Space') handlePhase8Input();
+            else if (gameState === 'PHASE2') {
+                if (e.code === 'ArrowLeft') handlePhase2Input('left');
+                if (e.code === 'ArrowUp') handlePhase2Input('up');
+                if (e.code === 'ArrowDown') handlePhase2Input('down');
+                if (e.code === 'ArrowRight') handlePhase2Input('right');
+            }
+            else if (gameState === 'PHASE7') {
+                if (e.code === 'ArrowLeft' && currentSpikeLane > 0) {
+                    currentSpikeLane--;
+                    document.getElementById('spike-hammer').style.left = lanePercentages[currentSpikeLane];
+                }
+                else if (e.code === 'ArrowRight' && currentSpikeLane < 2) {
+                    currentSpikeLane++;
+                    document.getElementById('spike-hammer').style.left = lanePercentages[currentSpikeLane];
+                }
+                else if (e.code === 'Space') {
+                    handlePhase7Space();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => { keysDown[e.code] = false; });
+
+        document.getElementById('start-btn').addEventListener('click', () => startGame(null));
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            document.getElementById('message-overlay').classList.remove('hidden');
+        });
+
+        // Practice UI Routing
+        document.getElementById('open-practice-btn').addEventListener('click', () => {
+            document.getElementById('main-menu-content').classList.add('hidden');
+            document.getElementById('practice-menu-content').classList.remove('hidden');
+        });
+        
+        document.getElementById('close-practice-btn').addEventListener('click', () => {
+            document.getElementById('main-menu-content').classList.remove('hidden');
+            document.getElementById('practice-menu-content').classList.add('hidden');
+        });
+        
+        document.querySelectorAll('.practice-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                startGame(e.target.dataset.phase);
+            });
+        });
+
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.diff-btn').forEach(b => {
+                    b.style.backgroundColor = '#e5e5e5';
+                    b.style.borderColor = '#333';
+                });
+                e.target.style.backgroundColor = '#d9d9d9';
+                e.target.style.borderColor = '#7F0019'; 
+                baseDifficultyMultiplier = parseFloat(e.target.dataset.diff);
+            });
+        });
+
+        document.getElementById('music-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if(file) {
+                bgmPlayer.src = URL.createObjectURL(file);
+                document.getElementById('music-upload-label').innerText = "TRACK LOADED: " + file.name.substring(0,10) + "...";
+            }
+        });
+
+        createArena();
+        createBullAndRider();
+        renderLeaderboard();
+        
+        window.onload = function() {
+            animate();
+        };
+    </script>
+</body>
+</html>

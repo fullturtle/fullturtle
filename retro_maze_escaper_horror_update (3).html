@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Retro Maze Escaper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'VT323', monospace; user-select: none; }
+        #game-container { width: 100%; height: 100%; display: block; }
+        
+        .screen-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); color: #fff; z-index: 10; }
+        .hidden { display: none !important; }
+        
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        .status-container { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
+        .stat-wrapper { display: flex; align-items: center; }
+        .stat-label-box { width: 80px; background: #332211; border: 2px solid #a88; color: #fb5; text-align: center; font-size: 20px; line-height: 24px; text-shadow: 1px 1px #000; border-right: none; }
+        .stat-bar-container { width: 200px; height: 28px; background: #111; border: 2px solid #a88; padding: 2px; }
+        
+        #hp-bar { height: 100%; background: linear-gradient(to bottom, #ff5555 0%, #aa0000 30%, #550000 100%); width: 100%; transition: width 0.2s; } 
+        #battery-bar { height: 100%; background: linear-gradient(to bottom, #ffff55 0%, #aaaa00 30%, #555500 100%); width: 100%; transition: width 0.1s; } 
+        
+        #compass { position: absolute; top: 20px; right: 20px; width: 80px; height: 80px; border-radius: 50%; border: 3px solid #a88; background: rgba(20,10,0,0.6); display: flex; justify-content: center; align-items: center; color: #fb5; font-size: 18px; }
+        .needle { width: 2px; height: 30px; background: red; position: absolute; top: 10px; transform-origin: bottom center; transition: transform 0.1s; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255,255,255,0.5); transform: translate(-50%, -50%); border-radius: 50%; }
+
+        #puzzle-canvas { background-color: #fff; border: 4px solid #333; cursor: crosshair; pointer-events: auto; }
+        .puzzle-hint { font-size: 1.5rem; color: #fb5; text-shadow: 2px 2px 0px #000; margin-bottom: 10px; }
+        #damage-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: red; opacity: 0; pointer-events: none; z-index: 4; transition: opacity 0.1s; }
+        
+        button.retro-btn { pointer-events: auto; background: #332211; border: 4px solid #a88; color: #fb5; font-family: 'VT323', monospace; font-size: 2rem; padding: 10px 30px; cursor: pointer; text-shadow: 2px 2px #000; transition: transform 0.1s; }
+        button.retro-btn:hover { background: #443322; transform: scale(1.05); }
+        button.retro-btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+    <div id="damage-overlay"></div>
+
+    <div id="title-screen" class="screen-overlay">
+        <h1 class="text-7xl text-red-600 mb-8 font-bold" style="text-shadow: 4px 4px 0px #300;">RETRO ESCAPER</h1>
+        <p class="text-2xl mb-8 text-center max-w-2xl px-4 text-gray-300">
+            [W A S D] to Move | [E] to Sprint<br>
+            [SPACE] to toggle Flashlight<br><br>
+            Turn OFF your light and stand still to hide and heal.<br>
+            When the red flowers bloom, IT is close.
+        </p>
+        <button class="retro-btn" onclick="startGame()">ENTER THE MAZE</button>
+    </div>
+
+    <div id="game-over-screen" class="screen-overlay hidden">
+        <h1 class="text-8xl text-red-600 mb-4" style="text-shadow: 4px 4px 0px #000;">YOU DIED</h1>
+        <button class="retro-btn mt-8" onclick="location.reload()">TRY AGAIN</button>
+    </div>
+
+    <div id="victory-screen" class="screen-overlay hidden">
+        <h1 class="text-7xl text-yellow-500 mb-8 font-bold">ESCAPED</h1>
+        <p class="text-2xl mb-8 text-gray-300">You have survived the labyrinth.</p>
+        <button class="retro-btn" onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+
+    <div id="puzzle-screen" class="screen-overlay hidden" style="background: rgba(0,0,0,0.95);">
+        <h2 class="text-5xl text-white mb-2" style="font-family: 'VT323';">FIND THE DIFFERENCE</h2>
+        <p class="puzzle-hint">Click the specific difference on the RIGHT image quickly!</p>
+        <canvas id="puzzle-canvas" width="600" height="320"></canvas>
+    </div>
+
+    <div id="hud" class="hidden">
+        <div id="crosshair"></div>
+        <div class="status-container">
+            <div class="stat-wrapper">
+                <div class="stat-label-box">HP</div>
+                <div class="stat-bar-container"><div id="hp-bar"></div></div>
+            </div>
+            <div class="stat-wrapper">
+                <div class="stat-label-box" style="font-size: 16px;">BATTERY</div>
+                <div class="stat-bar-container"><div id="battery-bar"></div></div>
+            </div>
+        </div>
+        <div id="compass">
+            N
+            <div class="needle" id="compass-needle"></div>
+        </div>
+        <div style="position: absolute; bottom: 20px; right: 20px; color: #aaa; font-size: 24px; text-shadow: 2px 2px 0px #000; text-align: right;">
+            [E] Hold to Sprint<br>
+            <span class="text-yellow-500">[SPACE] Toggle Flashlight</span>
+        </div>
+    </div>
+
+    <div id="game-container"></div>
+
+    <script>
+        const GameState = { TITLE: 0, PLAYING: 1, PUZZLE: 2, GAMEOVER: 3, VICTORY: 4 };
+        let currentState = GameState.TITLE;
+
+        let scene, camera, renderer, flashlight;
+        let maze = [];
+        let walls = [];
+        let entities = []; 
+        let items = [];
+        
+        const CELL_SIZE = 4;
+        const WALL_HEIGHT = 4;
+        const MAX_LEVELS = 5;
+        
+        // Physics & Movement state
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let isSprinting = false;
+        let velocity = new THREE.Vector3();
+        let euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        let bobTime = 0;
+        let lastFootstepTime = 0;
+        let timeNotMoving = 0;
+        
+        let currentLevel = 0;
+        let playerHP = 100;
+        const MAX_HP = 100;
+        let battery = 100;
+        const MAX_BATTERY = 100;
+        
+        let lastTime = 0;
+        let flowerSpawnTimer = 0;
+
+        let theMonster = { mesh: null, active: false, speed: 0, state: 'hunt', stateTimer: 0, targetPath: [] };
+        let jumpScareCooldown = 15.0;
+        let isFlashlightOn = true;
+        let flashlightModel = null;
+        let spacePressed = false;
+
+        // Level Config: Larger sizes to make it a true labyrinth
+        const levelConfig = [
+            { size: 21, theme: 'stone', monsterSpeed: 3.5 },
+            { size: 25, theme: 'brick', monsterSpeed: 4.2 }, 
+            { size: 29, theme: 'moss',  monsterSpeed: 5.0 },
+            { size: 33, theme: 'wood',  monsterSpeed: 6.0 },
+            { size: 37, theme: 'flesh', monsterSpeed: 7.2 }
+        ];
+
+        const textures = {};
+
+        function generateTextures() {
+            function createTexture(drawFunc, size = 128) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size; canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                drawFunc(ctx, size);
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.magFilter = THREE.NearestFilter; 
+                return tex;
+            }
+
+            textures.stone = createTexture((ctx, size) => {
+                ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, size, size);
+                for(let i=0; i<400; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#1a1a1a' : '#3a3a3a';
+                    ctx.fillRect(Math.random()*size, Math.random()*size, Math.random()*8, Math.random()*8);
+                }
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(0, size/2, size, 2); ctx.fillRect(size/2, 0, 2, size);
+            });
+
+            textures.brick = createTexture((ctx, size) => {
+                ctx.fillStyle = '#4a2a2a'; ctx.fillRect(0,0,size,size);
+                ctx.fillStyle = '#111';
+                for(let y=0; y<size; y+=16) {
+                    ctx.fillRect(0, y, size, 2);
+                    let offset = (y/16)%2===0 ? 0 : 16;
+                    for(let x=0; x<size; x+=32) ctx.fillRect(x+offset, y, 2, 16);
+                }
+            });
+
+            textures.moss = createTexture((ctx, size) => {
+                ctx.fillStyle = '#1a2a1a'; ctx.fillRect(0,0,size,size);
+                for(let i=0; i<300; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#2a4a2a' : '#111';
+                    ctx.fillRect(Math.random()*size, Math.random()*size, 6, 6);
+                }
+            });
+            
+            textures.wood = createTexture((ctx, size) => {
+                ctx.fillStyle = '#3a2a1a'; ctx.fillRect(0,0,size,size);
+                ctx.fillStyle = '#1a0a00';
+                for(let i=0; i<size; i+=8) {
+                    ctx.fillRect(0, i + Math.random()*4, size, 1);
+                }
+            });
+
+            textures.flesh = createTexture((ctx, size) => {
+                ctx.fillStyle = '#4a0a0a'; ctx.fillRect(0,0,size,size);
+                for(let i=0; i<200; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#6a1a1a' : '#2a0000';
+                    ctx.beginPath(); ctx.ellipse(Math.random()*size, Math.random()*size, Math.random()*15, Math.random()*5, Math.random()*Math.PI, 0, Math.PI*2); ctx.fill();
+                }
+            });
+
+            // Terrifying Junji Ito Style Face
+            textures.monsterFace = createTexture((ctx, size) => {
+                ctx.fillStyle = '#000'; ctx.fillRect(0,0,size,size); 
+                ctx.fillStyle = '#dcd4d4'; // Pale skin
+                ctx.beginPath(); ctx.ellipse(size/2, size/2, size*0.35, size*0.48, 0, 0, Math.PI*2); ctx.fill();
+                
+                // Sunken Eyes
+                ctx.fillStyle = '#050505';
+                ctx.beginPath(); ctx.ellipse(size*0.35, size*0.4, size*0.08, size*0.12, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(size*0.65, size*0.4, size*0.08, size*0.12, -0.2, 0, Math.PI*2); ctx.fill();
+                
+                // Pupils
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(size*0.35, size*0.4, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(size*0.65, size*0.4, 2.5, 0, Math.PI*2); ctx.fill();
+                
+                // Creepy gaping mouth
+                ctx.fillStyle = '#000'; 
+                ctx.beginPath();
+                ctx.moveTo(size*0.25, size*0.65);
+                ctx.quadraticCurveTo(size*0.5, size*0.5, size*0.75, size*0.65);
+                ctx.quadraticCurveTo(size*0.5, size*0.95, size*0.25, size*0.65);
+                ctx.fill();
+                
+                // Sharp Teeth
+                ctx.fillStyle = '#aaa';
+                for(let i=0; i<8; i++) {
+                    let x = size*0.3 + i*(size*0.4/8);
+                    ctx.beginPath(); ctx.moveTo(x, size*0.62); ctx.lineTo(x+3, size*0.7); ctx.lineTo(x+6, size*0.62); ctx.fill(); 
+                }
+                
+                // Shading lines
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
+                for(let i=0; i<100; i++) {
+                    ctx.beginPath();
+                    let startX = Math.random()*size;
+                    let startY = Math.random()*size;
+                    ctx.moveTo(startX, startY); ctx.lineTo(startX + (Math.random()-0.5)*15, startY + (Math.random()-0.5)*30); ctx.stroke();
+                }
+            }, 256);
+
+            textures.spiderLily = createTexture((ctx, size) => {
+                ctx.clearRect(0, 0, size, size);
+                ctx.strokeStyle = '#e62233'; ctx.lineWidth = 2;
+                const cx = size / 2, cy = size / 2;
+                for (let i = 0; i < 14; i++) {
+                    const angle = (i / 14) * Math.PI * 2;
+                    ctx.beginPath(); ctx.moveTo(cx, cy);
+                    ctx.bezierCurveTo(cx + Math.cos(angle)*size*0.2, cy + Math.sin(angle)*size*0.2, 
+                                      cx + Math.cos(angle+0.3)*size*0.4, cy + Math.sin(angle+0.3)*size*0.4, 
+                                      cx + Math.cos(angle-0.2)*size*0.45, cy + Math.sin(angle-0.2)*size*0.45);
+                    ctx.stroke();
+                }
+            }, 128);
+        }
+
+        function init3D() {
+            generateTextures();
+
+            scene = new THREE.Scene();
+            // Lighter ambient fog to increase general visibility
+            scene.background = new THREE.Color(0x151515);
+            scene.fog = new THREE.Fog(0x151515, 5, 40); 
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            
+            // Flashlight Spotlight (Attached to Camera)
+            flashlight = new THREE.SpotLight(0xfffaee, 2.0, 50, Math.PI/4, 0.4, 1);
+            flashlight.position.set(0, 0, 0);
+            flashlight.target.position.set(0, 0, -1);
+            camera.add(flashlight);
+            camera.add(flashlight.target);
+            
+            // Flashlight 3D Model (Held in Right Hand)
+            const flGroup = new THREE.Group();
+            const flGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 16);
+            const flMat = new THREE.MeshLambertMaterial({color: 0x333333});
+            const flMesh = new THREE.Mesh(flGeo, flMat);
+            flMesh.rotation.x = Math.PI / 2;
+            
+            const flLens = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.1, 16), new THREE.MeshBasicMaterial({color: 0xffffee}));
+            flLens.rotation.x = Math.PI / 2;
+            flLens.position.z = -0.175;
+            
+            flGroup.add(flMesh); flGroup.add(flLens);
+            flGroup.position.set(0.5, -0.3, -0.6); 
+            camera.add(flGroup);
+            flashlightModel = flGroup;
+
+            scene.add(camera);
+
+            // Increased Ambient Light
+            const ambientLight = new THREE.AmbientLight(0x444444); 
+            scene.add(ambientLight);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (currentState !== GameState.PLAYING || document.pointerLockElement !== document.body) return;
+            euler.y -= e.movementX * 0.002;
+            euler.x -= e.movementY * 0.002;
+            euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+            camera.quaternion.setFromEuler(euler);
+        });
+
+        document.getElementById('game-container').addEventListener('click', () => {
+            if (currentState === GameState.PLAYING) document.body.requestPointerLock();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (currentState !== GameState.PLAYING) return;
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                case 'KeyE': case 'ShiftLeft': isSprinting = true; break;
+                case 'Space': 
+                    if (!spacePressed) {
+                        isFlashlightOn = !isFlashlightOn;
+                        playSound('click'); 
+                        spacePressed = true;
+                    }
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                case 'KeyD': case 'ArrowRight': moveRight = false; break;
+                case 'KeyE': case 'ShiftLeft': isSprinting = false; break;
+                case 'Space': spacePressed = false; break;
+            }
+        });
+
+        function generateMaze(size) {
+            let grid = Array(size).fill().map(() => Array(size).fill(1));
+            // Recursive backtracker
+            function carve(x, y) {
+                grid[y][x] = 0;
+                const dirs = [[0,-2],[0,2],[-2,0],[2,0]].sort(() => Math.random() - 0.5);
+                for (let [dx, dy] of dirs) {
+                    const nx = x + dx, ny = y + dy;
+                    if (nx > 0 && nx < size-1 && ny > 0 && ny < size-1 && grid[ny][nx] === 1) {
+                        grid[y+dy/2][x+dx/2] = 0;
+                        carve(nx, ny);
+                    }
+                }
+            }
+            carve(1, 1);
+            
+            // "Make it simple": Punch generous holes to remove dead ends and create loops
+            for(let y=1; y<size-1; y++) {
+                for(let x=1; x<size-1; x++) {
+                    if (grid[y][x] === 1 && Math.random() < 0.25) { // 25% chance to break a wall down
+                        grid[y][x] = 0;
+                    }
+                }
+            }
+            
+            // Re-seal the outer boundary just in case
+            for(let i=0; i<size; i++) { grid[0][i] = 1; grid[size-1][i] = 1; grid[i][0] = 1; grid[i][size-1] = 1; }
+
+            grid[1][1] = 2; // Start
+            let endX, endY;
+            do {
+                endX = Math.floor(Math.random() * (size/2)) + Math.floor(size/2) - 1;
+                endY = Math.floor(Math.random() * (size/2)) + Math.floor(size/2) - 1;
+            } while(grid[endY][endX] !== 0);
+            grid[endY][endX] = 3; // End
+            
+            return { grid, size };
+        }
+
+        // BFS for Monster Pathfinding
+        function bfsPathfind(startX, startZ, targetX, targetZ) {
+            let queue = [{x: startX, z: startZ, path: []}];
+            let visited = new Set();
+            visited.add(`${startX},${startZ}`);
+            const dirs = [[0,1], [1,0], [0,-1], [-1,0]];
+            
+            while(queue.length > 0) {
+                let curr = queue.shift();
+                if (curr.x === targetX && curr.z === targetZ) return curr.path;
+
+                for (let d of dirs) {
+                    let nx = curr.x + d[0];
+                    let nz = curr.z + d[1];
+                    if (maze[nz] !== undefined && maze[nz][nx] !== 1 && !visited.has(`${nx},${nz}`)) {
+                        visited.add(`${nx},${nz}`);
+                        queue.push({x: nx, z: nz, path: [...curr.path, {x: nx, z: nz}]});
+                    }
+                }
+            }
+            return [];
+        }
+
+        function hasLineOfSight(x0, y0, x1, y1) {
+            let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+            let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
+            let err = dx - dy;
+            while(true) {
+                if (maze[y0] && maze[y0][x0] === 1) return false;
+                if (x0 === x1 && y0 === y1) break;
+                let e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+            return true;
+        }
+
+        function buildLevel() {
+            walls.forEach(w => scene.remove(w)); walls = [];
+            entities.forEach(e => scene.remove(e.mesh)); entities = [];
+            items.forEach(i => scene.remove(i.mesh)); items = [];
+            if(theMonster.mesh) scene.remove(theMonster.mesh);
+
+            const config = levelConfig[currentLevel];
+            
+            const wallMaterial = new THREE.MeshLambertMaterial({ map: textures[config.theme], color: 0xcccccc }); 
+            const floorMaterial = new THREE.MeshLambertMaterial({ map: textures.stone, color: 0x777777 });
+
+            document.getElementById('compass').classList.remove('hidden');
+
+            const mazeData = generateMaze(config.size);
+            maze = mazeData.grid;
+            
+            const wallGeo = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
+            const floorGeo = new THREE.PlaneGeometry(CELL_SIZE, CELL_SIZE);
+
+            let emptyCells = [];
+
+            for (let z = 0; z < mazeData.size; z++) {
+                for (let x = 0; x < mazeData.size; x++) {
+                    const posX = x * CELL_SIZE;
+                    const posZ = z * CELL_SIZE;
+
+                    if (maze[z][x] === 1) {
+                        let wall = new THREE.Mesh(wallGeo, wallMaterial);
+                        wall.position.set(posX, WALL_HEIGHT / 2, posZ);
+                        scene.add(wall); walls.push(wall);
+                    } else {
+                        emptyCells.push({x, z});
+                        
+                        let floor = new THREE.Mesh(floorGeo, floorMaterial);
+                        floor.rotation.x = -Math.PI / 2; floor.position.set(posX, 0, posZ);
+                        scene.add(floor); walls.push(floor);
+
+                        let ceil = new THREE.Mesh(floorGeo, wallMaterial); // Ceiling
+                        ceil.rotation.x = Math.PI / 2; ceil.position.set(posX, WALL_HEIGHT, posZ);
+                        scene.add(ceil); walls.push(ceil);
+
+                        if (maze[z][x] === 3) {
+                            let portalGeo = new THREE.BoxGeometry(CELL_SIZE*0.6, WALL_HEIGHT, CELL_SIZE*0.6);
+                            let portalMat = new THREE.MeshBasicMaterial({color: 0xff0000, transparent: true, opacity: 0.5});
+                            let portal = new THREE.Mesh(portalGeo, portalMat);
+                            portal.position.set(posX, WALL_HEIGHT/2, posZ);
+                            scene.add(portal);
+                            entities.push({ type: 'portal', mesh: portal, active: true });
+                        }
+                    }
+                }
+            }
+
+            camera.position.set(1 * CELL_SIZE, WALL_HEIGHT / 2, 1 * CELL_SIZE);
+            euler.set(0, 0, 0, 'YXZ');
+            camera.quaternion.setFromEuler(euler);
+            
+            // Main Monster (Tall, slender, horrifying face)
+            let mGeo = new THREE.BoxGeometry(1.0, WALL_HEIGHT * 0.95, 1.0);
+            let mMat = [
+                new THREE.MeshBasicMaterial({color: 0x050505}), new THREE.MeshBasicMaterial({color: 0x050505}),
+                new THREE.MeshBasicMaterial({color: 0x050505}), new THREE.MeshBasicMaterial({color: 0x050505}),
+                new THREE.MeshBasicMaterial({map: textures.monsterFace}), new THREE.MeshBasicMaterial({color: 0x050505})
+            ];
+            let mesh = new THREE.Mesh(mGeo, mMat);
+            
+            let startCell;
+            do { startCell = emptyCells[Math.floor(Math.random() * emptyCells.length)]; } 
+            while (Math.abs(startCell.x - 1) < 8 && Math.abs(startCell.z - 1) < 8); // Spawn far from player
+            
+            mesh.position.set(startCell.x * CELL_SIZE, WALL_HEIGHT/2, startCell.z * CELL_SIZE);
+            scene.add(mesh);
+            theMonster = { mesh: mesh, active: true, speed: config.monsterSpeed, state: 'wander', stateTimer: 0, targetPath: [] };
+
+            // Spawn Batteries
+            let batGeo = new THREE.BoxGeometry(0.4, 0.6, 0.4);
+            let batMat = new THREE.MeshLambertMaterial({color: 0xffff00});
+            for(let i=0; i<6 + currentLevel; i++) {
+                let cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                let bat = new THREE.Mesh(batGeo, batMat);
+                bat.position.set(cell.x * CELL_SIZE, 0.3, cell.z * CELL_SIZE);
+                scene.add(bat);
+                items.push({type: 'battery', mesh: bat, active: true});
+            }
+        }
+
+        function checkCollision(pos, r) {
+            // Check the 4 corners of a bounding box around the given position
+            const corners = [
+                {x: pos.x - r, z: pos.z - r}, {x: pos.x + r, z: pos.z - r},
+                {x: pos.x - r, z: pos.z + r}, {x: pos.x + r, z: pos.z + r}
+            ];
+            for (let c of corners) {
+                let cx = Math.round(c.x / CELL_SIZE);
+                let cz = Math.round(c.z / CELL_SIZE);
+                if (maze[cz] && maze[cz][cx] === 1) return true;
+            }
+            return false;
+        }
+
+        function updatePlayer(delta) {
+            // Flashlight Logic
+            if (isFlashlightOn && battery > 0) {
+                flashlight.intensity = 2.0;
+                if (flashlightModel) flashlightModel.children[1].material.color.setHex(0xffffee);
+                battery = Math.max(0, battery - delta * 0.4); 
+            } else {
+                flashlight.intensity = 0;
+                if (flashlightModel) flashlightModel.children[1].material.color.setHex(0x111111);
+            }
+            document.getElementById('battery-bar').style.width = `${(battery/MAX_BATTERY)*100}%`;
+
+            let isMoving = moveForward || moveBackward || moveLeft || moveRight;
+
+            // Target Velocity Calculation (Strictly Capped)
+            let targetSpeed = 0;
+            if (isMoving) targetSpeed = isSprinting ? 12.0 : 5.5; // Units per second
+
+            let inputDir = new THREE.Vector3(
+                Number(moveRight) - Number(moveLeft),
+                0,
+                Number(moveForward) - Number(moveBackward)
+            ).normalize();
+
+            let camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+            camDir.y = 0; camDir.normalize();
+            let camRight = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
+
+            let moveVec = new THREE.Vector3();
+            moveVec.addScaledVector(camDir, inputDir.z);
+            moveVec.addScaledVector(camRight, inputDir.x);
+            moveVec.normalize();
+
+            // Smoothly interpolate current velocity towards target velocity
+            velocity.x += (moveVec.x * targetSpeed - velocity.x) * 15.0 * delta;
+            velocity.z += (moveVec.z * targetSpeed - velocity.z) * 15.0 * delta;
+
+            if (isMoving) {
+                timeNotMoving = 0;
+                // Head bob & footsteps
+                bobTime += delta * (isSprinting ? 15 : 10);
+                camera.position.y = (WALL_HEIGHT / 2) + Math.sin(bobTime) * 0.15;
+                if (Math.sin(bobTime) > 0.9 && performance.now() - lastFootstepTime > (isSprinting ? 300 : 450)) {
+                    playSound('step'); lastFootstepTime = performance.now();
+                }
+            } else {
+                // Hiding to Heal Logic (Must be perfectly still AND have flashlight off)
+                timeNotMoving += delta;
+                if (timeNotMoving > 2.0 && !isFlashlightOn && playerHP < MAX_HP) {
+                    playerHP = Math.min(MAX_HP, playerHP + 15 * delta); 
+                    document.getElementById('hp-bar').style.width = `${(playerHP/MAX_HP)*100}%`;
+                }
+                camera.position.y = WALL_HEIGHT / 2;
+            }
+
+            // Flashlight Bobbing
+            if (flashlightModel) {
+                flashlightModel.position.y = -0.3 + (isMoving ? Math.sin(bobTime * 0.5) * 0.05 : 0);
+                flashlightModel.position.x = 0.5 + (isMoving ? Math.cos(bobTime * 0.5) * 0.05 : 0);
+            }
+
+            // Apply movement with independent X/Z sliding collision
+            let nextPos = camera.position.clone();
+            nextPos.x += velocity.x * delta;
+            if (!checkCollision(nextPos, 0.3)) camera.position.x = nextPos.x;
+            else velocity.x = 0; // Stop momentum on wall hit
+            
+            nextPos = camera.position.clone();
+            nextPos.z += velocity.z * delta;
+            if (!checkCollision(nextPos, 0.3)) camera.position.z = nextPos.z;
+            else velocity.z = 0;
+        }
+
+        function flashScreen(type) {
+            const overlay = document.getElementById('damage-overlay');
+            if(type === 'damage') { overlay.style.background = 'red'; overlay.style.opacity = '0.7'; }
+            if(type === 'heal') { overlay.style.background = 'yellow'; overlay.style.opacity = '0.3'; }
+            setTimeout(() => { overlay.style.opacity = '0'; }, 200);
+        }
+
+        function updateEntities(delta) {
+            let pPos = camera.position;
+            const config = levelConfig[currentLevel];
+
+            // Item Collection
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.mesh.rotation.y += delta * 2;
+                // Calculate 2D distance ignoring the Y (height) axis so items are easy to grab
+                let dist2D = Math.hypot(pPos.x - item.mesh.position.x, pPos.z - item.mesh.position.z);
+                if (dist2D < 1.5) {
+                    battery = Math.min(MAX_BATTERY, battery + 35);
+                    flashScreen('heal');
+                    scene.remove(item.mesh);
+                    items.splice(i, 1);
+                }
+            }
+
+            if (theMonster.active) {
+                let mPos = theMonster.mesh.position;
+                let distToPlayer = pPos.distanceTo(mPos);
+                
+                // --- Flashlight Interaction & Battery Drain ---
+                let dirToMonster = new THREE.Vector3().subVectors(mPos, pPos).normalize();
+                let camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+                let angle = camDir.angleTo(dirToMonster);
+                
+                let isIlluminated = isFlashlightOn && (angle < flashlight.angle) && (distToPlayer < 25) && (battery > 0);
+
+                if (isIlluminated) {
+                    // Drain battery rapidly if shining directly at monster
+                    battery = Math.max(0, battery - delta * 15.0); 
+                    if (theMonster.state !== 'flee' && theMonster.state !== 'jumpscare') {
+                        theMonster.state = 'flee';
+                        theMonster.stateTimer = 3.5;
+                        theMonster.targetPath = []; // Forget path
+                    }
+                }
+
+                jumpScareCooldown -= delta;
+
+                // Pathfinding Coords
+                let pcX = Math.round(pPos.x / CELL_SIZE);
+                let pcZ = Math.round(pPos.z / CELL_SIZE);
+                let mcX = Math.round(mPos.x / CELL_SIZE);
+                let mcZ = Math.round(mPos.z / CELL_SIZE);
+
+                // Safely check Line of Sight without freezing AI if inside a wall
+                let canSeePlayer = false;
+                if (maze[mcZ] && maze[mcZ][mcX] !== 1 && maze[pcZ] && maze[pcZ][pcX] !== 1) {
+                    canSeePlayer = hasLineOfSight(mcX, mcZ, pcX, pcZ);
+                }
+                
+                let playerMoving = velocity.lengthSq() > 1.0;
+                let playerHidden = (!playerMoving && timeNotMoving > 2.0 && !isFlashlightOn); // Needs light OFF to hide
+
+                // --- State Machine Transitions ---
+                if (theMonster.state === 'flee') {
+                    theMonster.stateTimer -= delta;
+                    theMonster.mesh.material[4].color.setHex(0x550000); // Dark red face when running
+                    
+                    // Pick a corner opposite to player
+                    let targetX = pcX < config.size/2 ? config.size-2 : 1;
+                    let targetZ = pcZ < config.size/2 ? config.size-2 : 1;
+                    
+                    if (theMonster.targetPath.length === 0 || Math.random() < 0.05) {
+                        theMonster.targetPath = bfsPathfind(mcX, mcZ, targetX, targetZ);
+                    }
+                    
+                    if (theMonster.stateTimer <= 0) theMonster.state = 'hunt'; // Resume hunt
+
+                } else if (theMonster.state !== 'jumpscare') {
+                    theMonster.mesh.material[4].color.setHex(0xffffff);
+                    
+                    // Wall Jump Scare Logic
+                    if (jumpScareCooldown <= 0 && distToPlayer > 15 && Math.random() < 0.005 && !playerHidden) {
+                        // Find a wall right next to player to emerge from
+                        let offsets = [[1,0], [-1,0], [0,1], [0,-1]];
+                        let validWall = null;
+                        for(let off of offsets) {
+                            if (maze[pcZ+off[1]] && maze[pcZ+off[1]][pcX+off[0]] === 1) {
+                                validWall = {x: pcX+off[0], z: pcZ+off[1]}; break;
+                            }
+                        }
+                        if (validWall) {
+                            theMonster.mesh.position.set(validWall.x * CELL_SIZE, WALL_HEIGHT/2, validWall.z * CELL_SIZE);
+                            jumpScareCooldown = 25.0; // Long cooldown
+                            theMonster.state = 'jumpscare';
+                            theMonster.stateTimer = 1.5; // Rush out of wall for 1.5s
+                            playSound('scare');
+                        }
+                    }
+
+                    // Normal AI Tracking
+                    if (theMonster.state !== 'jumpscare') {
+                        if (canSeePlayer && !playerHidden) {
+                            theMonster.state = 'hunt';
+                        } else if (playerMoving && !playerHidden) {
+                            theMonster.state = 'investigate'; // Heard footsteps
+                        } else if (playerHidden) {
+                            theMonster.state = 'wander'; // Lost track completely
+                        }
+
+                        // Path calculation (Only calculate if outside a wall to avoid breaking BFS)
+                        if (maze[mcZ] && maze[mcZ][mcX] !== 1) {
+                            if (theMonster.state === 'hunt' || theMonster.state === 'investigate') {
+                                if (theMonster.targetPath.length === 0 || Math.random() < 0.1) {
+                                    theMonster.targetPath = bfsPathfind(mcX, mcZ, pcX, pcZ);
+                                }
+                            } else if (theMonster.state === 'wander') {
+                                if (theMonster.targetPath.length === 0) {
+                                    let rx, rz;
+                                    do {
+                                        rx = Math.floor(Math.random() * maze.length);
+                                        rz = Math.floor(Math.random() * maze.length);
+                                    } while(maze[rz] === undefined || maze[rz][rx] !== 0);
+                                    theMonster.targetPath = bfsPathfind(mcX, mcZ, rx, rz);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- Monster Execution (Moving) ---
+                if (theMonster.state === 'jumpscare') {
+                    theMonster.stateTimer -= delta;
+                    // Ignore grid, walk straight out of wall at player
+                    let mVel = new THREE.Vector3().subVectors(pPos, mPos).normalize().multiplyScalar(theMonster.speed * 1.5 * delta);
+                    mVel.y = 0;
+                    theMonster.mesh.position.add(mVel);
+                    if (theMonster.stateTimer <= 0) {
+                        theMonster.state = 'hunt'; // Re-engage pathfinding
+                        theMonster.targetPath = [];
+                    }
+                } 
+                else if (theMonster.targetPath && theMonster.targetPath.length > 0) {
+                    let nextNode = theMonster.targetPath[0];
+                    let targetPos = new THREE.Vector3(nextNode.x * CELL_SIZE, WALL_HEIGHT/2, nextNode.z * CELL_SIZE);
+                    
+                    let dirToNode = new THREE.Vector3().subVectors(targetPos, mPos);
+                    dirToNode.y = 0;
+                    
+                    if (dirToNode.length() < 1.0) { // Reached node with tolerance
+                        theMonster.targetPath.shift(); 
+                    } else {
+                        dirToNode.normalize();
+                        let currentMSpeed = (theMonster.state === 'flee') ? theMonster.speed * 1.5 : theMonster.speed;
+                        theMonster.mesh.position.add(dirToNode.multiplyScalar(currentMSpeed * delta));
+                    }
+                }
+                
+                theMonster.mesh.lookAt(pPos.x, mPos.y, pPos.z);
+
+                // --- Audio Tension ---
+                if (tensionGain && audioCtx) {
+                    let maxTDist = 22;
+                    let minTDist = 2;
+                    if (distToPlayer > maxTDist) {
+                        tensionGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+                    } else {
+                        let vol = 1.0 - ((distToPlayer - minTDist) / (maxTDist - minTDist));
+                        vol = Math.max(0, Math.min(1, vol));
+                        tensionGain.gain.setTargetAtTime(vol * 0.4, audioCtx.currentTime, 0.2);
+                        audioFilter.frequency.setTargetAtTime(600 + vol * 1500, audioCtx.currentTime, 0.2);
+                    }
+                }
+
+                // --- Spider Lily Warning System ---
+                if (distToPlayer < 12) {
+                    flowerSpawnTimer += delta;
+                    if (flowerSpawnTimer > 0.4) {
+                        flowerSpawnTimer = 0;
+                        const lilyMat = new THREE.MeshBasicMaterial({ map: textures.spiderLily, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                        const lilyMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lilyMat);
+                        // Spawn in air around player
+                        let spawnDir = new THREE.Vector3((Math.random()-0.5), (Math.random()-0.5), (Math.random()-0.5)).normalize().multiplyScalar(6);
+                        lilyMesh.position.copy(pPos).add(spawnDir);
+                        scene.add(lilyMesh);
+                        // Swarm towards player
+                        entities.push({ type: 'flower', mesh: lilyMesh, active: true, life: 2.5, dir: spawnDir.multiplyScalar(-0.8) });
+                    }
+                }
+
+                // --- Damage Player ---
+                if (distToPlayer < 1.5) {
+                    playerHP -= 50 * delta; // Rapid damage
+                    flashScreen('damage');
+                    document.getElementById('hp-bar').style.width = `${Math.max(0, (playerHP/MAX_HP)*100)}%`;
+                    if (playerHP <= 0) gameOver();
+                }
+
+                let angleToP = Math.atan2(camDir.x, camDir.z);
+                document.getElementById('compass-needle').style.transform = `rotate(${angleToP}rad)`;
+            }
+
+            // General Entity Cleanup/Updates
+            for (let i = entities.length - 1; i >= 0; i--) {
+                let e = entities[i];
+                if (!e.active) continue;
+                
+                if (e.type === 'portal') {
+                    e.mesh.rotation.y += delta;
+                    if (pPos.distanceTo(e.mesh.position) < 2.0) startPuzzle();
+                } else if (e.type === 'flower') {
+                    e.mesh.lookAt(camera.position);
+                    e.mesh.position.add(e.dir.clone().multiplyScalar(delta)); // Drift towards player
+                    e.life -= delta;
+                    if (e.life <= 0) {
+                        scene.remove(e.mesh);
+                        entities.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        let puzzleObject = '';
+        let puzzleTimer = 15.0;
+        const PUZZLE_TIME_LIMIT = 15.0;
+
+        function startPuzzle() {
+            if (tensionGain && audioCtx) tensionGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            currentState = GameState.PUZZLE;
+            document.exitPointerLock?.();
+            document.getElementById('puzzle-screen').classList.remove('hidden');
+            
+            const objects = ['negi', 'gorilla', 'lemon', 'apple', 'monster'];
+            puzzleObject = objects[Math.min(currentLevel, objects.length-1)];
+            puzzleTimer = PUZZLE_TIME_LIMIT;
+            drawPuzzle();
+        }
+
+        function updatePuzzle(delta) {
+            puzzleTimer -= delta;
+            drawPuzzle();
+            if (puzzleTimer <= 0) {
+                gameOver(); // Time limit penalty!
+            }
+        }
+
+        function drawPuzzle() {
+            const canvas = document.getElementById('puzzle-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Timer Bar (Top)
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, 20);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(0, 0, canvas.width * Math.max(0, puzzleTimer / PUZZLE_TIME_LIMIT), 20);
+
+            // Draw Canvas Background
+            ctx.fillStyle = '#ddd'; ctx.fillRect(0, 20, 300, 300); ctx.fillRect(300, 20, 300, 300);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(300, 20); ctx.lineTo(300, 320); ctx.stroke();
+
+            // Draw Objects
+            function drawShape(x, y, isRight) {
+                ctx.save(); ctx.translate(x, y);
+                if(puzzleObject === 'negi') {
+                    ctx.fillStyle = 'white'; ctx.fillRect(-10, -50, 20, 100);
+                    ctx.fillStyle = 'green'; ctx.fillRect(-10, -100, 10, 50); ctx.fillRect(0, -90, 10, 40);
+                    if(isRight) { ctx.fillStyle = 'lightgreen'; ctx.beginPath(); ctx.arc(5, -60, 5, 0, Math.PI*2); ctx.fill(); }
+                } else if(puzzleObject === 'gorilla') {
+                    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(-15, -10, 10, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(15, -10, 10, 0, Math.PI*2); ctx.fill();
+                    if(isRight) { ctx.fillStyle = 'red'; ctx.fillRect(-5, 10, 10, 5); } 
+                } else if(puzzleObject === 'lemon') {
+                    ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.ellipse(0, 0, 40, 25, Math.PI/4, 0, Math.PI*2); ctx.fill();
+                    if(isRight) { ctx.fillStyle = '#aa0'; ctx.beginPath(); ctx.arc(-10, -5, 3, 0, Math.PI*2); ctx.fill(); }
+                } else if(puzzleObject === 'apple') {
+                    ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(-15, 0, 30, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(15, 0, 30, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = 'brown'; ctx.fillRect(-2, -40, 4, 15);
+                    if(isRight) { ctx.fillStyle = 'green'; ctx.beginPath(); ctx.ellipse(10, -35, 10, 5, Math.PI/4, 0, Math.PI*2); ctx.fill(); }
+                } else if(puzzleObject === 'monster') {
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, 0, 30, 60, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-10, -20, 5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(10, -20, 5, 0, Math.PI*2); ctx.fill();
+                    if(isRight) { ctx.beginPath(); ctx.arc(0, 10, 8, 0, Math.PI*2); ctx.fill(); } 
+                }
+                ctx.restore();
+            }
+            drawShape(150, 170, false); drawShape(450, 170, true);
+        }
+
+        document.getElementById('puzzle-canvas').addEventListener('click', (e) => {
+            if(currentState !== GameState.PUZZLE) return;
+            const rect = e.target.getBoundingClientRect();
+            const x = e.clientX - rect.left, y = e.clientY - rect.top;
+            
+            let target = {x:0, y:0, r:30}; 
+            if(puzzleObject === 'negi') target = {x:455, y:110, r:20};
+            if(puzzleObject === 'gorilla') target = {x:450, y:180, r:20};
+            if(puzzleObject === 'lemon') target = {x:440, y:165, r:20};
+            if(puzzleObject === 'apple') target = {x:460, y:135, r:20};
+            if(puzzleObject === 'monster') target = {x:450, y:180, r:25};
+
+            if(Math.hypot(x - target.x, y - target.y) < target.r) {
+                completeLevel();
+            }
+        });
+
+        let audioCtx, tensionGain, audioFilter;
+        function initAudio() {
+            if (audioCtx) return; 
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            audioCtx = new AudioContext();
+
+            // Strings Tension
+            tensionGain = audioCtx.createGain();
+            tensionGain.gain.value = 0; 
+            tensionGain.connect(audioCtx.destination);
+
+            audioFilter = audioCtx.createBiquadFilter();
+            audioFilter.type = 'lowpass';
+            audioFilter.frequency.value = 600;
+            audioFilter.connect(tensionGain);
+
+            const osc3 = audioCtx.createOscillator(); osc3.type = 'sawtooth'; osc3.frequency.value = 146.83; osc3.connect(audioFilter); osc3.start();
+            const osc4 = audioCtx.createOscillator(); osc4.type = 'sawtooth'; osc4.frequency.value = 207.65; osc4.connect(audioFilter); osc4.start();
+            const osc5 = audioCtx.createOscillator(); osc5.type = 'sawtooth'; osc5.frequency.value = 415.30; osc5.connect(audioFilter); osc5.start();
+        }
+
+        function playSound(type) {
+            if(!audioCtx) return;
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if(type === 'step') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'scare') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.8, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'click') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+            }
+        }
+
+        function startGame() {
+            initAudio(); 
+            init3D();
+            document.getElementById('title-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            
+            currentLevel = 0; playerHP = MAX_HP; battery = MAX_BATTERY;
+            document.getElementById('hp-bar').style.width = '100%';
+            document.getElementById('battery-bar').style.width = '100%';
+            buildLevel();
+            
+            currentState = GameState.PLAYING;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function completeLevel() {
+            document.getElementById('puzzle-screen').classList.add('hidden');
+            if (currentLevel < MAX_LEVELS - 1) {
+                currentLevel++; 
+                battery = Math.min(MAX_BATTERY, battery + 50); // Restore some battery
+                buildLevel();
+                currentState = GameState.PLAYING; 
+                document.body.requestPointerLock();
+            } else {
+                currentState = GameState.VICTORY; 
+                document.getElementById('hud').classList.add('hidden'); 
+                document.getElementById('victory-screen').classList.remove('hidden');
+            }
+        }
+
+        function gameOver() {
+            if (tensionGain && audioCtx) tensionGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            currentState = GameState.GAMEOVER; 
+            document.exitPointerLock?.();
+            document.getElementById('hud').classList.add('hidden'); 
+            document.getElementById('puzzle-screen').classList.add('hidden'); 
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function gameLoop(time) {
+            if (currentState === GameState.TITLE || currentState === GameState.GAMEOVER || currentState === GameState.VICTORY) { 
+                lastTime = time; 
+                requestAnimationFrame(gameLoop); 
+                return; 
+            }
+            
+            // Cap delta to prevent huge jumps if tab is backgrounded
+            const delta = Math.min((time - lastTime) / 1000, 0.1); 
+            lastTime = time;
+
+            if (currentState === GameState.PLAYING) {
+                updatePlayer(delta);
+                updateEntities(delta);
+                renderer.render(scene, camera);
+            } else if (currentState === GameState.PUZZLE) {
+                updatePuzzle(delta);
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
