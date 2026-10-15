@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swamp Turtle Builder: Expansive Biomes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        
+        body { margin: 0; overflow: hidden; background-color: #1a1a24; font-family: 'Fredoka One', cursive; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.9);
+            border: 4px solid #333; border-radius: 16px; padding: 15px 25px;
+            box-shadow: 0 8px 0 rgba(0,0,0,0.2); pointer-events: auto;
+        }
+
+        .stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 1.2rem; }
+        .stat-icon { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #333; }
+        .red-icon { background-color: #ef4444; }
+        .blue-icon { background-color: #3b82f6; }
+        .green-icon { background-color: #22c55e; }
+        .yellow-icon { background-color: #eab308; }
+
+        #health-bar-container { width: 200px; height: 20px; background: #ddd; border: 3px solid #333; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+        #health-bar { width: 100%; height: 100%; background: #ef4444; transition: width 0.2s; }
+
+        #message-box {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #fff; border: 4px solid #333; border-radius: 20px; padding: 30px;
+            text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            display: none; pointer-events: auto; z-index: 50;
+        }
+        
+        #house-ui-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+
+        .house-ui {
+            position: absolute; transform: translate(-50%, -100%);
+            background: rgba(255, 255, 255, 0.9); border: 2px solid #333; border-radius: 8px;
+            padding: 5px 10px; text-align: center; display: none; width: 120px;
+        }
+        .house-hp-bg { width: 100%; height: 8px; background: #ddd; border-radius: 4px; margin-top: 4px; overflow: hidden;}
+        .house-hp-bar { height: 100%; background: #22c55e; width: 100%; transition: width 0.2s, background-color 0.2s;}
+
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; z-index: 100; pointer-events: auto;
+            text-align: center; padding: 20px;
+        }
+
+        button {
+            background: #4ade80; border: 4px solid #166534; border-radius: 12px;
+            padding: 10px 20px; font-size: 1.5rem; font-family: 'Fredoka One', cursive;
+            color: #111; cursor: pointer; transition: transform 0.1s, background 0.2s;
+            box-shadow: 0 6px 0 #166534; margin-top: 20px;
+        }
+        button:active { transform: translateY(6px); box-shadow: none; }
+        button:hover { background: #22c55e; }
+
+        #biome-req-panel { display: none; margin-top: 10px; background: #fffae6; border: 2px dashed #d97706; }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h1 class="text-5xl mb-4 text-green-400 drop-shadow-md">Swamp Turtle Builder</h1>
+        <p class="text-xl mb-4">Explore the Expansive Wilds!</p>
+        <p class="text-md mb-2">WASD / Arrows to Move | SPACE to Jump & Crush Enemies</p>
+        <p class="text-md mb-6 text-yellow-300 max-w-2xl">
+            Gather small turtles on your shell. Avoid the Chasers!
+            Travel across the massive Tundra, Desert, Ocean, and Forest biomes to build 7 houses.
+        </p>
+        <button id="start-btn">Click to Start & Enable Audio</button>
+    </div>
+
+    <div id="ui-layer">
+        <div class="flex justify-between items-start">
+            <div class="panel">
+                <h1 class="text-2xl mb-2 text-green-700">Turtle Builder</h1>
+                <div class="stat-row">
+                    <span class="text-xl">🏠 Houses Built: <span id="houses-count">0</span> / 7</span>
+                </div>
+                <div id="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+            </div>
+            <div class="panel">
+                <h2 class="text-xl mb-2">Swarm</h2>
+                <div class="stat-row"><div class="stat-icon red-icon"></div> <span id="red-count">0</span></div>
+                <div class="stat-row"><div class="stat-icon blue-icon"></div> <span id="blue-count">0</span></div>
+                <div class="stat-row"><div class="stat-icon green-icon"></div> <span id="green-count">0</span></div>
+                <div class="stat-row"><div class="stat-icon yellow-icon"></div> <span id="yellow-count">0</span></div>
+            </div>
+        </div>
+
+        <div class="flex justify-center mb-8">
+            <div id="biome-req-panel" class="panel text-center">
+                <h3 class="text-lg text-amber-700 mb-1" id="biome-name">Approaching House</h3>
+                <p class="text-sm" id="biome-reqs">Requires: ???</p>
+                <div class="text-xs text-gray-500 mt-1" id="biome-hint">(Stand close to build)</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="house-ui-container"></div>
+
+    <div id="message-box">
+        <h2 id="message-title" class="text-4xl mb-4"></h2>
+        <p id="message-desc" class="text-lg mb-6"></p>
+        <button onclick="location.reload()">Play Again</button>
+    </div>
+    
+    <script>
+        let scene, camera, renderer, clock;
+        let playerMesh, playerGroup;
+        const mapSize = 300; // Expanded map size
+        
+        let sfx = {};
+
+        const BIOMES = [
+            { name: 'TUNDRA', color: 0xeeeeff, req: { blue: 3, red: 1, green: 0, yellow: 0 } },
+            { name: 'DESERT', color: 0xedc9af, req: { blue: 0, red: 0, green: 1, yellow: 3 } },
+            { name: 'OCEAN', color: 0x1ca3ec, req: { blue: 4, red: 0, green: 0, yellow: 1 } },
+            { name: 'FOREST', color: 0x228b22, req: { blue: 1, red: 1, green: 3, yellow: 0 } },
+            { name: 'BEEHIVE', color: 0xffcc00, req: { blue: 0, red: 1, green: 0, yellow: 4 } }
+        ];
+
+        const gameState = {
+            isPlaying: false,
+            isCaptured: false,
+            isGigaChad: false,
+            health: 100,
+            housesBuilt: 0,
+            totalHouses: 7,
+            followers: { red: 0, blue: 0, green: 0, yellow: 0 },
+            keys: { w: false, a: false, s: false, d: false, e: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false, " ": false },
+            isJumping: false,
+            yVelocity: 0
+        };
+
+        const smallTurtles = []; 
+        let activeFollowers = []; 
+        const houses = [];
+        const enemies = [];
+        const bears = [];
+        
+        // New Characters & Mechanics
+        let sackChaser, ghostShooter, powerUp, shoePowerUp;
+        const ghostProjectiles = [];
+        let gigaChadTimer = 0;
+        let lastBearSpawnTime = 0;
+
+        const playerVelocity = new THREE.Vector3();
+        // Diorama angled top-down, zoomed out, narrow FOV
+        const cameraOffset = new THREE.Vector3(-45, 65, 55); 
+
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            await Tone.start();
+            initAudio();
+            document.getElementById('start-overlay').style.display = 'none';
+            gameState.isPlaying = true;
+            // Reset keys so player doesn't instantly move if key was held
+            for(let k in gameState.keys) gameState.keys[k] = false;
+        });
+        
+        function initAudio() {
+            sfx.jump = new Tone.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } }).toDestination();
+            sfx.crush = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 4, oscillator: { type: "sine" }, envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 0.1 } }).toDestination();
+            sfx.collect = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination();
+            sfx.hurt = new Tone.NoiseSynth({ noise: { type: "brown" }, envelope: { attack: 0.01, decay: 0.3, sustain: 0 } }).toDestination();
+            sfx.hurt.volume.value = -10;
+            sfx.build = new Tone.PolySynth(Tone.Synth, { envelope: { attack: 0.05, decay: 0.3, sustain: 0.2, release: 1 } }).toDestination();
+            sfx.captured = new Tone.Synth({ oscillator: { type: "sawtooth" }, envelope: { attack: 0.1, decay: 0.3, sustain: 0.2, release: 0.5 } }).toDestination();
+            sfx.powerup = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.05, decay: 0.1, sustain: 0.5, release: 1 } }).toDestination();
+            
+            // Minimalist Bubbly OST
+            const synth = new Tone.FMSynth({
+                harmonicity: 2, modulationIndex: 3,
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.1, release: 1 },
+                modulation: { type: "square" },
+                modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.5 }
+            });
+            const filter = new Tone.Filter(1200, "lowpass");
+            const delay = new Tone.FeedbackDelay("8n", 0.3);
+            const verb = new Tone.Reverb(2).toDestination();
+            synth.chain(filter, delay, verb);
+            synth.volume.value = -12;
+            
+            const pentatonic = ["C4", "D4", "E4", "G4", "A4", "C5", "D5"];
+            Tone.Transport.scheduleRepeat((time) => {
+                if (gameState.isPlaying) {
+                    if (Math.random() > 0.4) {
+                        const note = pentatonic[Math.floor(Math.random() * pentatonic.length)];
+                        synth.triggerAttackRelease(note, "16n", time);
+                    }
+                }
+            }, "8n");
+            Tone.Transport.start();
+        }
+
+        function playSound(type) {
+            if (!gameState.isPlaying && type !== 'captured') return;
+            if (!sfx[type]) return;
+            try {
+                if (type === 'jump') sfx.jump.triggerAttackRelease("C4", "16n");
+                if (type === 'crush') sfx.crush.triggerAttackRelease("C2", "8n");
+                if (type === 'collect') sfx.collect.triggerAttackRelease(["E5", "G5"], "16n");
+                if (type === 'hurt') sfx.hurt.triggerAttackRelease("8n");
+                if (type === 'build') sfx.build.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n");
+                if (type === 'captured') sfx.captured.triggerAttackRelease("A3", "4n");
+                if (type === 'powerup') sfx.powerup.triggerAttackRelease("C6", "2n");
+            } catch(e) {}
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a24); // Dark studio room background
+            // Very dark fog to fade the diorama edges into the shadows of the room
+            scene.fog = new THREE.FogExp2(0x1a1a24, 0.0025);
+
+            // Lower FOV (35) creates a flatter, tilt-shift diorama perspective
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.BasicShadowMap; // Hard shadows aesthetic
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // Lighting setup for diorama (desk lamp feel)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            dirLight.position.set(150, 200, 80); 
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 4096;
+            dirLight.shadow.mapSize.height = 4096;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 600;
+            const d = 160;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            createBiomes();
+            addEnvironmentProps(); // Add trees, rocks, cacti, corals
+            createPlayer();
+            
+            // Fix Camera Angle: Set initial position relative to player
+            camera.position.copy(playerMesh.position).add(cameraOffset);
+            camera.lookAt(playerMesh.position);
+
+            spawnItems();
+            spawnNewCharacters();
+
+            window.addEventListener('keydown', (e) => { if(gameState.keys.hasOwnProperty(e.key)) gameState.keys[e.key] = true; });
+            window.addEventListener('keyup', (e) => { if(gameState.keys.hasOwnProperty(e.key)) gameState.keys[e.key] = false; });
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+        }
+
+        function createBiomes() {
+            // Expand quadrants to 150x150 to fill the 300x300 map
+            createFloorZone(-75, -75, BIOMES[0].color); // Tundra
+            createFloorZone(75, -75, BIOMES[1].color);  // Desert
+            createFloorZone(-75, 75, BIOMES[2].color);  // Ocean
+            createFloorZone(75, 75, BIOMES[3].color);   // Forest
+            
+            // Central Safe Zone (No Beehive)
+            const safeGeo = new THREE.CylinderGeometry(30, 30, 0.5, 32);
+            const safeMat = new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.5, flatShading: true });
+            const safeZone = new THREE.Mesh(safeGeo, safeMat);
+            safeZone.position.set(0, 0.25, 0);
+            safeZone.receiveShadow = true;
+            scene.add(safeZone);
+            
+            // Safe Zone Magical Ring
+            const ringGeo = new THREE.TorusGeometry(30, 0.5, 8, 32);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.5 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.set(0, 0.5, 0);
+            ring.rotation.x = Math.PI / 2;
+            scene.add(ring);
+
+            // Diorama Base (Wooden Table/Box underneath)
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 1.0 });
+            const baseBottom = new THREE.Mesh(new THREE.BoxGeometry(mapSize + 8, 10, mapSize + 8), baseMat);
+            baseBottom.position.set(0, -5.1, 0);
+            baseBottom.receiveShadow = true;
+            scene.add(baseBottom);
+
+            // Diorama Borders (Visible walls that frame the map)
+            const wallGeo = new THREE.BoxGeometry(mapSize + 8, 4, 4);
+            const w1 = new THREE.Mesh(wallGeo, baseMat); w1.position.set(0, 2, -(mapSize/2 + 2)); w1.castShadow = true;
+            const w2 = new THREE.Mesh(wallGeo, baseMat); w2.position.set(0, 2, (mapSize/2 + 2)); w2.castShadow = true;
+            const w3 = new THREE.Mesh(wallGeo, baseMat); w3.position.set(-(mapSize/2 + 2), 2, 0); w3.rotation.y = Math.PI/2; w3.castShadow = true;
+            const w4 = new THREE.Mesh(wallGeo, baseMat); w4.position.set((mapSize/2 + 2), 2, 0); w4.rotation.y = Math.PI/2; w4.castShadow = true;
+            scene.add(w1, w2, w3, w4);
+        }
+
+        // Procedurally generate a detailed texture for the ground
+        function createBiomeTexture(hexColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#' + hexColor.toString(16).padStart(6, '0');
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Add diorama-style dirt/noise
+            for(let i=0; i<6000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+                ctx.fillRect(Math.random()*512, Math.random()*512, Math.random()*3+1, Math.random()*3+1);
+            }
+
+            // Grid pattern for miniature board game feel
+            ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+            ctx.lineWidth = 2;
+            for(let i=0; i<=512; i+=64) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(12, 12); // Tile across the plane
+            return texture;
+        }
+
+        function createFloorZone(x, z, color) {
+            const geo = new THREE.PlaneGeometry(150, 150);
+            const texture = createBiomeTexture(color);
+            const mat = new THREE.MeshStandardMaterial({ map: texture, roughness: 1.0, flatShading: true });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.set(x, 0, z);
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        }
+
+        function getBiomeAt(x, z) {
+            if (Math.hypot(x, z) < 30) return { name: 'SAFE ZONE', color: 0xe0f2fe, req: null }; 
+            if (x < 0 && z < 0) return BIOMES[0];
+            if (x >= 0 && z < 0) return BIOMES[1];
+            if (x < 0 && z >= 0) return BIOMES[2];
+            return BIOMES[3];
+        }
+
+        // Detailed Polygon Turtle Builder
+        function buildDetailedTurtle(primaryColor, shellColor, scale = 1, isPlayer = false) {
+            const group = new THREE.Group();
+            
+            // Shell - High detail polygonal look using Dodecahedron
+            const shellGeo = new THREE.DodecahedronGeometry(1.2, 1);
+            const shellMat = new THREE.MeshStandardMaterial({ color: shellColor, roughness: 0.7, flatShading: true });
+            const shell = new THREE.Mesh(shellGeo, shellMat);
+            shell.position.y = 0.7;
+            shell.scale.set(1, 0.5, 1.15); // Flatten and elongate
+            shell.castShadow = true;
+            group.add(shell);
+
+            // Belly/Body
+            const bellyGeo = new THREE.CylinderGeometry(1.1, 1.1, 0.4, 12);
+            const skinMat = new THREE.MeshStandardMaterial({ color: primaryColor, roughness: 0.8, flatShading: true });
+            const belly = new THREE.Mesh(bellyGeo, skinMat);
+            belly.position.y = 0.45;
+            belly.scale.set(1, 1, 1.1);
+            belly.castShadow = true;
+            group.add(belly);
+
+            // Head (Local +Z is Forward)
+            const headGeo = new THREE.IcosahedronGeometry(0.5, 1);
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.position.set(0, 0.7, 1.4); 
+            head.castShadow = true;
+            group.add(head);
+
+            // Eyes
+            const eyeGeo = new THREE.SphereGeometry(0.12, 6, 6);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(0.3, 0.2, 0.4);
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(-0.3, 0.2, 0.4);
+            head.add(eyeL, eyeR);
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.8, 6);
+            const legs = [];
+            const legPos = [
+                {x: 0.8, z: 0.9}, {x: -0.8, z: 0.9},   // Front
+                {x: 0.8, z: -0.8}, {x: -0.8, z: -0.8} // Back
+            ];
+            legPos.forEach((p, i) => {
+                const leg = new THREE.Mesh(legGeo, skinMat);
+                leg.position.set(p.x, 0.4, p.z);
+                leg.castShadow = true;
+                leg.userData = { originalY: 0.4, offsetPhase: i * (Math.PI/2) }; // For walking anim
+                legs.push(leg);
+                group.add(leg);
+            });
+
+            // Tail
+            const tailGeo = new THREE.ConeGeometry(0.2, 0.6, 6);
+            const tail = new THREE.Mesh(tailGeo, skinMat);
+            tail.position.set(0, 0.5, -1.2);
+            tail.rotation.x = -Math.PI / 2;
+            tail.castShadow = true;
+            group.add(tail);
+
+            group.userData = { legs: legs, isPlayer: isPlayer };
+            group.scale.set(scale, scale, scale);
+            return group;
+        }
+
+        // Extremely cute, round, kawaii-style turtles for the small followers
+        function buildCuteTurtle(primaryColor, shellColor, scale = 1) {
+            const group = new THREE.Group();
+            const skinMat = new THREE.MeshStandardMaterial({ color: primaryColor, roughness: 0.6, flatShading: true });
+            const shellMat = new THREE.MeshStandardMaterial({ color: shellColor, roughness: 0.4, flatShading: true });
+            
+            // Round glossy shell
+            const shellGeo = new THREE.SphereGeometry(0.8, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+            const shell = new THREE.Mesh(shellGeo, shellMat);
+            shell.position.y = 0.4;
+            shell.scale.set(1.1, 0.8, 1.15);
+            shell.castShadow = true;
+            group.add(shell);
+
+            // Big round head
+            const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.position.set(0, 0.5, 0.85);
+            head.castShadow = true;
+            group.add(head);
+
+            // Kawaii Anime Eyes
+            const eyeGeo = new THREE.SphereGeometry(0.14, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+            const highlightGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(0.25, 0.15, 0.45);
+            const hlL = new THREE.Mesh(highlightGeo, highlightMat);
+            hlL.position.set(0.06, 0.06, 0.1);
+            eyeL.add(hlL);
+
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(-0.25, 0.15, 0.45);
+            const hlR = new THREE.Mesh(highlightGeo, highlightMat);
+            hlR.position.set(0.06, 0.06, 0.1);
+            eyeR.add(hlR);
+
+            head.add(eyeL, eyeR);
+
+            // Stubby round legs
+            const legGeo = new THREE.SphereGeometry(0.2, 8, 8);
+            const legs = [];
+            const legPos = [
+                {x: 0.65, z: 0.6}, {x: -0.65, z: 0.6},
+                {x: 0.65, z: -0.5}, {x: -0.65, z: -0.5}
+            ];
+            legPos.forEach((p, i) => {
+                const leg = new THREE.Mesh(legGeo, skinMat);
+                leg.position.set(p.x, 0.2, p.z);
+                leg.castShadow = true;
+                leg.userData = { originalY: 0.2, offsetPhase: i * (Math.PI/2) };
+                legs.push(leg);
+                group.add(leg);
+            });
+
+            // Cute little round tail
+            const tail = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), skinMat);
+            tail.position.set(0, 0.3, -0.9);
+            tail.castShadow = true;
+            group.add(tail);
+
+            group.userData = { legs: legs, isPlayer: false };
+            group.scale.set(scale, scale, scale);
+            return group;
+        }
+
+        function buildSackChaser() {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1a237e, flatShading: true }); // Dark blue suit
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, flatShading: true }); // Straw color
+            const sackMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63, flatShading: true }); // Sack color
+
+            // Body
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 1.5), bodyMat);
+            body.position.y = 2.5; body.castShadow = true;
+            group.add(body);
+
+            // Head/Mask
+            const head = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), hatMat);
+            head.position.y = 4.5; head.castShadow = true;
+            group.add(head);
+
+            // Giant Straw Hat
+            const hatGeo = new THREE.ConeGeometry(3.5, 1.5, 8);
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 5.5; hat.scale.y = 0.5; hat.castShadow = true;
+            group.add(hat);
+
+            // Sacks
+            const sack1 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), sackMat);
+            sack1.position.set(1.5, 1.5, 0); sack1.scale.y = 1.5; sack1.castShadow = true;
+            group.add(sack1);
+            const sack2 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), sackMat);
+            sack2.position.set(-1.5, 1.5, 0); sack2.scale.y = 1.5; sack2.castShadow = true;
+            group.add(sack2);
+
+            group.scale.set(1.5, 1.5, 1.5);
+            return group;
+        }
+
+        function buildGhostShooter() {
+            const group = new THREE.Group();
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x333333, flatShading: true });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, flatShading: true });
+
+            // Body (Sitting in a chair - simplified)
+            const chair = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshStandardMaterial({color: 0x5d4037}));
+            chair.position.y = 1.5; chair.castShadow = true;
+            group.add(chair);
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 1.5), shirtMat);
+            body.position.set(0, 2.75, -0.5); body.castShadow = true;
+            group.add(body);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), skinMat);
+            head.position.set(0, 4.5, -0.5); head.castShadow = true;
+            group.add(head);
+
+            group.scale.set(1.5, 1.5, 1.5);
+            return group;
+        }
+
+        function buildGhostProjectile() {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0xaaddff, transparent: true, opacity: 0.6, flatShading: true });
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), mat);
+            body.position.y = 0.5;
+            group.add(body);
+            const tail = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 8), mat);
+            tail.position.y = 0; tail.rotation.x = Math.PI;
+            group.add(tail);
+            return group;
+        }
+
+        function buildNegi() {
+            const group = new THREE.Group();
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+            const greenMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, flatShading: true });
+
+            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2, 8), whiteMat);
+            stalk.position.y = 1; stalk.castShadow = true;
+            group.add(stalk);
+            
+            const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.6, 2, 8), greenMat);
+            leaves.position.y = 3; leaves.castShadow = true;
+            group.add(leaves);
+            
+            group.scale.set(1.5, 1.5, 1.5);
+            return group;
+        }
+        
+        function buildBear() {
+            const group = new THREE.Group();
+            const brownMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, flatShading: true });
+            const lightBrownMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 3.5), brownMat);
+            body.position.y = 1.25; body.castShadow = true;
+            group.add(body);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), brownMat);
+            head.position.set(0, 2.5, 2); head.castShadow = true;
+            group.add(head);
+            
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 1), lightBrownMat);
+            snout.position.set(0, 2.2, 2.8); snout.castShadow = true;
+            group.add(snout);
+
+            group.scale.set(1.2, 1.2, 1.2);
+            return group;
+        }
+
+        function buildFruit(type) {
+            const group = new THREE.Group();
+            let mat, geo;
+            if(type === 'apple') {
+                mat = new THREE.MeshStandardMaterial({color: 0xff0000, flatShading: true});
+                geo = new THREE.SphereGeometry(0.5, 8, 8);
+            } else if (type === 'banana') {
+                mat = new THREE.MeshStandardMaterial({color: 0xffeb3b, flatShading: true});
+                geo = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 8);
+                group.rotation.z = Math.PI/4;
+            } else { // grape
+                mat = new THREE.MeshStandardMaterial({color: 0x9c27b0, flatShading: true});
+                geo = new THREE.SphereGeometry(0.3, 6, 6);
+                for(let i=0; i<5; i++) {
+                    const g = new THREE.Mesh(geo, mat);
+                    g.position.set(Math.random()*0.5-0.25, Math.random()*0.5, Math.random()*0.5-0.25);
+                    group.add(g);
+                }
+            }
+            if(type !== 'grape') group.add(new THREE.Mesh(geo, mat));
+            group.castShadow = true;
+            group.scale.set(2,2,2);
+            return group;
+        }
+
+        function createPlayer() {
+            // Main character: Green skin, Dark Green shell
+            playerGroup = buildDetailedTurtle(0x86efac, 0x004d00, 1.0, true);
+            playerGroup.position.set(0, 0, 50); // Start further out
+            scene.add(playerGroup);
+            playerMesh = playerGroup; 
+        }
+
+        // Environment Detailing
+        function addEnvironmentProps() {
+            const propCount = 400; // Lots of props for the expansive map
+            for(let i=0; i<propCount; i++) {
+                let x = (Math.random() - 0.5) * (mapSize - 10);
+                let z = (Math.random() - 0.5) * (mapSize - 10);
+                
+                // Keep the center beehive relatively clear
+                if (Math.hypot(x, z) < 30) continue; 
+
+                const biome = getBiomeAt(x, z);
+                let mesh;
+                
+                if (biome.name === 'TUNDRA') {
+                    mesh = Math.random() > 0.4 ? createPineTree(0xffffff, 0xa0a0a0) : createRock(0xe0e0e0);
+                } else if (biome.name === 'FOREST') {
+                    mesh = Math.random() > 0.3 ? createPineTree(0x228b22, 0x8b4513) : createRock(0x666666);
+                } else if (biome.name === 'DESERT') {
+                    mesh = Math.random() > 0.5 ? createCactus() : createRock(0xd2b48c);
+                } else if (biome.name === 'OCEAN') {
+                    mesh = createCoral();
+                }
+                
+                if (mesh) {
+                    mesh.position.set(x, 0, z);
+                    mesh.rotation.y = Math.random() * Math.PI * 2;
+                    scene.add(mesh);
+                }
+            }
+        }
+
+        function createPineTree(leafColor, trunkColor = 0x5c4033) {
+            const group = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2, 6), new THREE.MeshStandardMaterial({color: trunkColor, flatShading: true}));
+            trunk.position.y = 1; trunk.castShadow = true; trunk.receiveShadow = true;
+            group.add(trunk);
+            
+            for(let i=0; i<3; i++) {
+                const leaves = new THREE.Mesh(
+                    new THREE.ConeGeometry(2.5 - i*0.5, 3, 7),
+                    new THREE.MeshStandardMaterial({color: leafColor, flatShading: true})
+                );
+                leaves.position.y = 2.5 + i * 1.5;
+                leaves.castShadow = true;
+                group.add(leaves);
+            }
+            group.scale.setScalar(0.8 + Math.random()*1.2);
+            return group;
+        }
+
+        function createCactus() {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({color: 0x2e8b57, flatShading: true});
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 4, 7), mat);
+            trunk.position.y = 2; trunk.castShadow = true;
+            group.add(trunk);
+            
+            const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 2, 7), mat);
+            arm1.position.set(0.8, 2, 0); arm1.rotation.z = -Math.PI/4; arm1.castShadow = true;
+            group.add(arm1);
+            
+            const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.5, 7), mat);
+            arm2.position.set(-0.8, 2.5, 0); arm2.rotation.z = Math.PI/4; arm2.castShadow = true;
+            group.add(arm2);
+            
+            group.scale.setScalar(0.7 + Math.random()*0.8);
+            return group;
+        }
+
+        function createRock(color) {
+            const geo = new THREE.DodecahedronGeometry(1.5, 0);
+            const mat = new THREE.MeshStandardMaterial({color: color, flatShading: true, roughness: 0.9});
+            const rock = new THREE.Mesh(geo, mat);
+            rock.position.y = 0.5;
+            rock.scale.set(1 + Math.random(), 0.5 + Math.random(), 1 + Math.random());
+            rock.castShadow = true; rock.receiveShadow = true;
+            return rock;
+        }
+
+        function createCoral() {
+            const group = new THREE.Group();
+            const colors = [0xff7f50, 0xda70d6, 0x00ced1, 0xff69b4];
+            const mat = new THREE.MeshStandardMaterial({color: colors[Math.floor(Math.random()*colors.length)], flatShading: true});
+            
+            for(let i=0; i<4; i++) {
+                const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, 2 + Math.random()*2, 5), mat);
+                branch.position.y = 1;
+                branch.rotation.set((Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5);
+                branch.castShadow = true;
+                group.add(branch);
+            }
+            group.scale.setScalar(0.6 + Math.random()*0.8);
+            return group;
+        }
+
+        function spawnItems() {
+            // Spawn Small Turtles (Pikmin)
+            const types = ['red', 'blue', 'green', 'yellow'];
+            const colors = { red: 0xef4444, blue: 0x3b82f6, green: 0x22c55e, yellow: 0xeab308 };
+            // Brighter, cuter shell colors for the small ones
+            const shellColors = { red: 0xffa0a0, blue: 0x80bfff, green: 0x80ff80, yellow: 0xffff80 };
+            
+            for (let i = 0; i < 120; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                const turtleGroup = buildCuteTurtle(colors[type], shellColors[type], 0.5);
+                
+                turtleGroup.position.set(
+                    (Math.random() - 0.5) * (mapSize - 20),
+                    0,
+                    (Math.random() - 0.5) * (mapSize - 20)
+                );
+                
+                scene.add(turtleGroup);
+                smallTurtles.push({ mesh: turtleGroup, type: type, active: true });
+            }
+
+            // Scatter Houses across expansive map
+            const houseCoords = [
+                {x: -60, z: -60}, {x: 80, z: -50}, {x: -70, z: 80}, {x: 50, z: 90}, 
+                {x: 0, z: -40}, {x: -110, z: -10}, {x: 100, z: 20}
+            ];
+
+            houseCoords.forEach((coord) => {
+                const geo = new THREE.BoxGeometry(6, 1, 6);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(coord.x, 0.5, coord.z);
+                
+                const biome = getBiomeAt(coord.x, coord.z);
+
+                scene.add(mesh);
+                
+                // Add UI element
+                const uiDiv = document.createElement('div');
+                uiDiv.className = 'house-ui';
+                uiDiv.innerHTML = `<div class="font-bold text-sm">Defenders: <span class="def-count">0</span></div><div class="house-hp-bg"><div class="house-hp-bar"></div></div>`;
+                document.getElementById('house-ui-container').appendChild(uiDiv);
+                
+                houses.push({ mesh, built: false, biome: biome, health: 100, defenders: 0, ui: uiDiv, maxBears: 0 });
+            });
+
+            // Spawn Enemies
+            for(let i=0; i < 25; i++) {
+                createEnemy();
+            }
+        }
+
+        function spawnNewCharacters() {
+            // Sack Chaser
+            sackChaser = {
+                mesh: buildSackChaser(),
+                speed: 12,
+                state: 'chasing'
+            };
+            sackChaser.mesh.position.set(100, 0, 100);
+            scene.add(sackChaser.mesh);
+
+            // Ghost Shooter
+            ghostShooter = {
+                mesh: buildGhostShooter(),
+                lastShotTime: 0,
+                shootInterval: 3 // seconds
+            };
+            ghostShooter.mesh.position.set(-100, 0, -100);
+            ghostShooter.mesh.rotation.y = Math.PI/4;
+            scene.add(ghostShooter.mesh);
+
+            // Power Up Items
+            spawnPowerUp();
+            spawnShoe();
+        }
+
+        function spawnPowerUp() {
+            if(powerUp) scene.remove(powerUp.mesh);
+            const mesh = buildNegi();
+            mesh.position.set((Math.random()-0.5)*150, 1, (Math.random()-0.5)*150);
+            powerUp = { mesh, active: true };
+            scene.add(mesh);
+        }
+
+        function buildShoe() {
+            const group = new THREE.Group();
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xef4444, flatShading: true });
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+
+            const sole = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 2.5), whiteMat);
+            sole.position.y = 0.15; sole.castShadow = true;
+            group.add(sole);
+
+            const top = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 2), redMat);
+            top.position.set(0, 0.7, -0.1); top.castShadow = true;
+            group.add(top);
+            
+            const toe = new THREE.Mesh(new THREE.BoxGeometry(1, 0.6, 0.8), whiteMat);
+            toe.position.set(0, 0.45, 1); toe.castShadow = true;
+            group.add(toe);
+
+            group.scale.set(1.5, 1.5, 1.5);
+            return group;
+        }
+
+        function spawnShoe() {
+            if(shoePowerUp) scene.remove(shoePowerUp.mesh);
+            const mesh = buildShoe();
+            mesh.position.set((Math.random()-0.5)*150, 1, (Math.random()-0.5)*150);
+            shoePowerUp = { mesh, active: true };
+            scene.add(mesh);
+        }
+
+        function spawnBear(house) {
+            const bear = { mesh: buildBear(), target: house, speed: 7, state: 'walking' };
+            // Spawn at edge
+            const angle = Math.random() * Math.PI * 2;
+            bear.mesh.position.set(Math.cos(angle) * (mapSize/2 - 5), 0, Math.sin(angle) * (mapSize/2 - 5));
+            scene.add(bear.mesh);
+            bears.push(bear);
+            house.maxBears++;
+        }
+
+        function createEnemy() {
+            const types = [
+                new THREE.IcosahedronGeometry(1.5, 1), // Spherical
+                new THREE.ConeGeometry(1.5, 3, 6),     // Triangular
+                new THREE.BoxGeometry(2, 2, 2)         // Squared
+            ];
+            const geo = types[Math.floor(Math.random() * types.length)];
+            const mat = new THREE.MeshStandardMaterial({ color: 0xaa0000, flatShading: true });
+            const mesh = new THREE.Mesh(geo, mat);
+            
+            mesh.position.set(
+                (Math.random() - 0.5) * (mapSize - 20),
+                1.5,
+                (Math.random() - 0.5) * (mapSize - 20)
+            );
+            mesh.castShadow = true;
+            
+            const angle = Math.random() * Math.PI * 2;
+            const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
+            
+            scene.add(mesh);
+            enemies.push({ mesh, dir, speed: 6 + Math.random() * 6 }); // Faster in large map
+        }
+
+        function takeDamage(amount) {
+            if (gameState.health <= 0) return;
+            gameState.health -= amount;
+            document.getElementById('health-bar').style.width = gameState.health + '%';
+            playSound('hurt');
+
+            // Flash player skin red
+            const skinMesh = playerGroup.children[1]; 
+            const oldColor = skinMesh.material.color.getHex();
+            skinMesh.material.color.setHex(0xff0000);
+            setTimeout(() => { if(skinMesh) skinMesh.material.color.setHex(oldColor); }, 200);
+
+            if (gameState.health <= 0) endGame(false);
+        }
+
+        function checkHouseProximity() {
+            let closeHouse = null;
+            let minDistance = 8;
+
+            houses.forEach(house => {
+                const dist = playerMesh.position.distanceTo(house.mesh.position);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closeHouse = house;
+                }
+            });
+
+            const reqPanel = document.getElementById('biome-req-panel');
+            if (closeHouse && closeHouse.biome.name !== 'SAFE ZONE') {
+                reqPanel.style.display = 'block';
+                document.getElementById('biome-name').innerText = closeHouse.built ? `Built House (${closeHouse.biome.name})` : `Biome: ${closeHouse.biome.name}`;
+                
+                if (!closeHouse.built) {
+                    const req = closeHouse.biome.req;
+                    document.getElementById('biome-reqs').innerHTML = 
+                        (req.blue > 0 ? `<span class="text-blue-600 font-bold">${req.blue} Blue</span> ` : '') +
+                        (req.red > 0 ? `<span class="text-red-600 font-bold">${req.red} Red</span> ` : '') +
+                        (req.green > 0 ? `<span class="text-green-600 font-bold">${req.green} Green</span> ` : '') +
+                        (req.yellow > 0 ? `<span class="text-yellow-600 font-bold">${req.yellow} Yellow</span>` : '');
+                    document.getElementById('biome-hint').innerText = "(Stand close and press SPACE to build)";
+
+                    if (gameState.followers.red >= req.red && gameState.followers.blue >= req.blue &&
+                        gameState.followers.green >= req.green && gameState.followers.yellow >= req.yellow) {
+                        reqPanel.style.borderColor = "#22c55e"; 
+                        if (gameState.keys[" "]) buildHouse(closeHouse);
+                    } else {
+                        reqPanel.style.borderColor = "#d97706";
+                    }
+                } else {
+                    document.getElementById('biome-reqs').innerHTML = `<span class="text-green-700 font-bold">Defenders: ${closeHouse.defenders} / 15</span>`;
+                    document.getElementById('biome-hint').innerText = "(Press E to deposit a turtle to defend against bears)";
+                    reqPanel.style.borderColor = "#3b82f6";
+                    
+                    if (gameState.keys["e"] && activeFollowers.length > 0) {
+                        depositDefender(closeHouse);
+                        gameState.keys["e"] = false; // Prevent rapid fire
+                    }
+                }
+            } else {
+                reqPanel.style.display = 'none';
+            }
+        }
+        
+        function depositDefender(house) {
+            if (house.defenders >= 15) return;
+            const f = activeFollowers.pop();
+            gameState.followers[f.type]--;
+            scene.remove(f.mesh);
+            house.defenders++;
+            updateUI();
+            playSound('collect'); // Using collect sound for deposit
+        }
+
+        function buildHouse(house) {
+            house.built = true;
+            const req = house.biome.req;
+            gameState.followers.red -= req.red;
+            gameState.followers.blue -= req.blue;
+            gameState.followers.green -= req.green;
+            gameState.followers.yellow -= req.yellow;
+
+            // Remove visual followers
+            let removed = { red: 0, blue: 0, green: 0, yellow: 0 };
+            for (let i = activeFollowers.length - 1; i >= 0; i--) {
+                const f = activeFollowers[i];
+                if (removed[f.type] < req[f.type]) {
+                    removed[f.type]++;
+                    scene.remove(f.mesh);
+                    activeFollowers.splice(i, 1);
+                }
+            }
+
+            updateUI();
+            playSound('build');
+
+            const houseGeo = new THREE.BoxGeometry(6, 6, 6);
+            const houseMat = new THREE.MeshStandardMaterial({ color: house.biome.color, flatShading: true });
+            house.mesh.geometry.dispose();
+            house.mesh.geometry = houseGeo;
+            house.mesh.material = houseMat;
+            house.mesh.position.y = 3;
+            house.mesh.castShadow = true; house.mesh.receiveShadow = true;
+
+            const roofGeo = new THREE.ConeGeometry(5, 4, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, flatShading: true });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = 5; roof.rotation.y = Math.PI / 4; roof.castShadow = true;
+            house.mesh.add(roof);
+
+            house.mesh.scale.set(0.1, 0.1, 0.1);
+            let grow = 0;
+            const popAnim = setInterval(() => {
+                grow += 0.1; house.mesh.scale.set(grow, grow, grow);
+                if (grow >= 1) clearInterval(popAnim);
+            }, 16);
+
+            gameState.housesBuilt++;
+            document.getElementById('houses-count').innerText = gameState.housesBuilt;
+
+            if (gameState.housesBuilt >= gameState.totalHouses) endGame(true);
+        }
+
+        function updateUI() {
+            document.getElementById('red-count').innerText = gameState.followers.red;
+            document.getElementById('blue-count').innerText = gameState.followers.blue;
+            document.getElementById('green-count').innerText = gameState.followers.green;
+            document.getElementById('yellow-count').innerText = gameState.followers.yellow;
+        }
+
+        function endGame(win) {
+            gameState.isPlaying = false;
+            const mb = document.getElementById('message-box');
+            mb.style.display = 'block';
+            document.getElementById('message-title').innerText = win ? 'You Conquered the Wilds!' : 'Crushed!';
+            document.getElementById('message-title').className = win ? 'text-4xl mb-4 text-green-600' : 'text-4xl mb-4 text-red-600';
+            document.getElementById('message-desc').innerText = win ? 'You built all 7 houses across the expansive biomes!' : 'The geometric enemies defeated you.';
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Animate Legs utility
+        function animateLegs(turtleGroup, isMoving, time, speedMultiplier = 1) {
+            if (!turtleGroup.userData.legs) return;
+            const speed = 25 * speedMultiplier;
+            turtleGroup.userData.legs.forEach(leg => {
+                if (isMoving) {
+                    leg.position.y = leg.userData.originalY + Math.abs(Math.sin(time * speed + leg.userData.offsetPhase)) * 0.2;
+                    leg.rotation.x = Math.sin(time * speed + leg.userData.offsetPhase) * 0.6;
+                } else {
+                    leg.position.y = leg.userData.originalY;
+                    leg.rotation.x = 0;
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Get delta regardless, to keep the clock ticking internally
+            let rawDelta = clock.getDelta();
+            
+            // Cap delta to prevent massive jumps (e.g., if tab was inactive or game just started)
+            const delta = Math.min(rawDelta, 0.1);
+            const time = clock.getElapsedTime();
+
+            if (!gameState.isPlaying) { 
+                // Render the scene in the background behind the start screen, but don't move anything
+                renderer.render(scene, camera); 
+                return; 
+            }
+
+            // Giga Chad mode timing
+            if (gameState.isGigaChad) {
+                if (time - gigaChadTimer > 10) {
+                    gameState.isGigaChad = false;
+                    playerGroup.scale.set(1, 1, 1);
+                } else {
+                    playerGroup.scale.set(2, 2, 2); // BIG TURTLE
+                }
+            }
+
+            // 1. Player Movement & Jumping
+            playerVelocity.set(0, 0, 0);
+            if (gameState.keys.w || gameState.keys.ArrowUp) playerVelocity.z -= 1;
+            if (gameState.keys.s || gameState.keys.ArrowDown) playerVelocity.z += 1;
+            if (gameState.keys.a || gameState.keys.ArrowLeft) playerVelocity.x -= 1;
+            if (gameState.keys.d || gameState.keys.ArrowRight) playerVelocity.x += 1;
+
+            const isPlayerMoving = playerVelocity.lengthSq() > 0;
+            const currentSpeed = gameState.speedBoost ? 45 : 22;
+
+            if (isPlayerMoving) {
+                playerVelocity.normalize().multiplyScalar(currentSpeed * delta);
+                playerMesh.position.add(playerVelocity);
+                
+                // +Z in Local Space is forward for our mesh, so we use atan2 properly
+                const targetRotation = Math.atan2(playerVelocity.x, playerVelocity.z);
+                
+                // Smooth rotation turning
+                const diff = targetRotation - playerMesh.rotation.y;
+                // Normalize diff to -PI to PI
+                const normDiff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                playerMesh.rotation.y += normDiff * 10 * delta; 
+            }
+
+            animateLegs(playerMesh, isPlayerMoving, time, 1);
+
+            // Boundary collision
+            const limit = (mapSize / 2) - 2;
+            playerMesh.position.x = Math.max(-limit, Math.min(limit, playerMesh.position.x));
+            playerMesh.position.z = Math.max(-limit, Math.min(limit, playerMesh.position.z));
+
+            // Jump Logic
+            if (gameState.keys[" "] && !gameState.isJumping) {
+                gameState.isJumping = true;
+                gameState.yVelocity = 25; 
+                playSound('jump');
+            }
+
+            if (gameState.isJumping) {
+                gameState.yVelocity -= 60 * delta; // Gravity
+                playerMesh.position.y += gameState.yVelocity * delta;
+
+                if (playerMesh.position.y <= 0) {
+                    playerMesh.position.y = 0;
+                    gameState.isJumping = false;
+                    gameState.yVelocity = 0;
+                }
+            }
+
+            // Camera follow
+            const targetCamPos = playerMesh.position.clone().add(cameraOffset);
+            camera.position.lerp(targetCamPos, 4 * delta);
+            camera.lookAt(playerMesh.position);
+
+            // 2. Small Turtles Collection
+            smallTurtles.forEach((st) => {
+                if (!st.active) return;
+                
+                // Pick up radius larger for Giga Chad
+                const pickupRadius = gameState.isGigaChad ? 6 : 3;
+                if (playerMesh.position.distanceTo(st.mesh.position) < pickupRadius) {
+                    st.active = false;
+                    gameState.followers[st.type]++;
+                    activeFollowers.push(st);
+                    updateUI();
+                    playSound('collect');
+                } else {
+                    st.mesh.rotation.y += 1 * delta;
+                }
+            });
+
+            // 3. Pikmin Swarm Follow Logic (Trailing behind)
+            activeFollowers.forEach((follower, index) => {
+                // Assign a persistent random swarm offset behind the player
+                if (!follower.swarmOffset) {
+                    follower.swarmOffset = {
+                        x: (Math.random() - 0.5) * 12, // Lateral spread
+                        z: -(Math.random() * 8 + 4)   // Negative Z is BEHIND the player model
+                    };
+                }
+
+                // Calculate target point based on player's current back side
+                const localOffset = new THREE.Vector3(follower.swarmOffset.x, 0, follower.swarmOffset.z);
+                localOffset.applyEuler(new THREE.Euler(0, playerMesh.rotation.y, 0));
+                const targetPos = playerMesh.position.clone().add(localOffset);
+                
+                // Add swarming noise
+                targetPos.x += Math.sin(time * 3 + index) * 0.8;
+                targetPos.z += Math.cos(time * 4 + index) * 0.8;
+
+                // Move towards target
+                const moveVec = targetPos.clone().sub(follower.mesh.position);
+                moveVec.y = 0; // Keep horizontal move logic separated
+                const distSq = moveVec.lengthSq();
+                
+                let isFollowerMoving = false;
+                if (distSq > 0.1) {
+                    isFollowerMoving = true;
+                    // Move
+                    moveVec.normalize().multiplyScalar(22 * delta);
+                    follower.mesh.position.add(moveVec);
+                    
+                    // Face movement direction smoothly
+                    const tRot = Math.atan2(moveVec.x, moveVec.z);
+                    const rDiff = Math.atan2(Math.sin(tRot - follower.mesh.rotation.y), Math.cos(tRot - follower.mesh.rotation.y));
+                    follower.mesh.rotation.y += rDiff * 15 * delta;
+                }
+
+                // Animate tiny legs
+                animateLegs(follower.mesh, isFollowerMoving, time, 1.5);
+                
+                // Jump with player (Mimicry)
+                follower.mesh.position.y = Math.max(0, playerMesh.position.y - (Math.sin(index)*0.2)); 
+            });
+
+            // 4. New Character Logic
+            const inSafeZone = playerMesh.position.length() < 30;
+
+            // Sack Chaser
+            if (sackChaser.state === 'dead') {
+                // Dead state, hide mesh
+            } else if (sackChaser.cooldown && time < sackChaser.cooldown) {
+                // Stunned/Recoiling - do not move
+            } else if (gameState.isGigaChad) {
+                const dir = sackChaser.mesh.position.clone().sub(playerMesh.position).normalize();
+                dir.y = 0;
+                sackChaser.mesh.position.add(dir.multiplyScalar(sackChaser.speed * 1.5 * delta));
+                sackChaser.mesh.lookAt(sackChaser.mesh.position.clone().add(dir));
+                
+                // Destroy Chaser!
+                if (playerMesh.position.distanceTo(sackChaser.mesh.position) < 6) {
+                    playSound('crush');
+                    sackChaser.state = 'dead';
+                    sackChaser.mesh.visible = false;
+                    setTimeout(() => {
+                        sackChaser.state = 'chasing';
+                        sackChaser.mesh.visible = true;
+                        sackChaser.mesh.position.set(100, 0, 100); // Respawn
+                    }, 10000);
+                }
+            } else if (inSafeZone) {
+                // Wait at the edge of the safe zone
+                const dir = sackChaser.mesh.position.clone().normalize();
+                const targetWaitPos = dir.multiplyScalar(32); 
+                const moveVec = targetWaitPos.sub(sackChaser.mesh.position);
+                moveVec.y = 0;
+                if (moveVec.length() > 0.5) {
+                    sackChaser.mesh.position.add(moveVec.normalize().multiplyScalar(sackChaser.speed * delta));
+                }
+                sackChaser.mesh.lookAt(playerMesh.position.x, sackChaser.mesh.position.y, playerMesh.position.z);
+            } else {
+                // Chase
+                const dir = playerMesh.position.clone().sub(sackChaser.mesh.position).normalize();
+                dir.y = 0;
+                sackChaser.mesh.position.add(dir.multiplyScalar(sackChaser.speed * delta));
+                sackChaser.mesh.lookAt(playerMesh.position.x, sackChaser.mesh.position.y, playerMesh.position.z);
+
+                if (playerMesh.position.distanceTo(sackChaser.mesh.position) < 3.5) {
+                    takeDamage(15);
+                    sackChaser.cooldown = time + 2; // Stun the chaser for 2 seconds
+                    
+                    // Knockback effect
+                    const pushDir = playerMesh.position.clone().sub(sackChaser.mesh.position);
+                    pushDir.y = 0; pushDir.normalize();
+                    playerMesh.position.add(pushDir.multiplyScalar(8));
+                }
+            }
+
+            // Ghost Shooter
+            if (!inSafeZone && time - ghostShooter.lastShotTime > ghostShooter.shootInterval) {
+                ghostShooter.lastShotTime = time;
+                const projectileGroup = buildGhostProjectile();
+                projectileGroup.position.copy(ghostShooter.mesh.position);
+                projectileGroup.position.y += 3;
+                
+                const dir = playerMesh.position.clone().sub(projectileGroup.position).normalize();
+                ghostProjectiles.push({ mesh: projectileGroup, dir: dir, speed: 20, birthTime: time });
+                scene.add(projectileGroup);
+            }
+            ghostShooter.mesh.lookAt(playerMesh.position.x, ghostShooter.mesh.position.y, playerMesh.position.z);
+
+            // Ghost Projectiles
+            for (let i = ghostProjectiles.length - 1; i >= 0; i--) {
+                const p = ghostProjectiles[i];
+                p.mesh.position.add(p.dir.clone().multiplyScalar(p.speed * delta));
+                
+                // Destroy if hits safe zone or out of time
+                if (time - p.birthTime > 5 || p.mesh.position.length() < 30) { 
+                    scene.remove(p.mesh); ghostProjectiles.splice(i, 1); continue;
+                }
+                
+                // Radius of player increases if Giga Chad
+                const hitRadius = gameState.isGigaChad ? 4 : 2;
+                if (p.mesh.position.distanceTo(playerMesh.position) < hitRadius) {
+                    scene.remove(p.mesh); ghostProjectiles.splice(i, 1);
+                    if (!gameState.isGigaChad) {
+                        takeDamage(10);
+                    }
+                    continue;
+                }
+            }
+
+            // Powerup (Negi)
+            if (powerUp.active) {
+                powerUp.mesh.rotation.y += delta * 2;
+                const pickupRadius = gameState.isGigaChad ? 6 : 3;
+                if (playerMesh.position.distanceTo(powerUp.mesh.position) < pickupRadius) {
+                    powerUp.active = false; scene.remove(powerUp.mesh);
+                    playSound('powerup');
+                    
+                    gameState.isGigaChad = true;
+                    gigaChadTimer = time;
+                    setTimeout(spawnPowerUp, 25000); // Respawn negi after 25s
+                }
+            }
+            
+            // Shoe Powerup
+            if (shoePowerUp && shoePowerUp.active) {
+                shoePowerUp.mesh.rotation.y += delta * 2;
+                const pickupRadius = gameState.isGigaChad ? 6 : 3;
+                if (playerMesh.position.distanceTo(shoePowerUp.mesh.position) < pickupRadius) {
+                    shoePowerUp.active = false; scene.remove(shoePowerUp.mesh);
+                    playSound('powerup');
+                    
+                    gameState.speedBoost = true;
+                    // Respawn shoe and remove boost after 15 seconds
+                    setTimeout(() => {
+                        gameState.speedBoost = false;
+                        spawnShoe();
+                    }, 15000); 
+                }
+            }
+
+            // 5. Bear Logic (House Attacking)
+            if (gameState.housesBuilt > 0 && time - lastBearSpawnTime > 15) {
+                lastBearSpawnTime = time;
+                const builtHouses = houses.filter(h => h.built && h.maxBears < 3);
+                if (builtHouses.length > 0) {
+                    const target = builtHouses[Math.floor(Math.random() * builtHouses.length)];
+                    spawnBear(target);
+                }
+            }
+            
+            for (let i = bears.length - 1; i >= 0; i--) {
+                const bear = bears[i];
+                const hMesh = bear.target.mesh;
+                const dir = hMesh.position.clone().sub(bear.mesh.position);
+                dir.y = 0;
+                
+                if (dir.length() > 3) {
+                    bear.mesh.position.add(dir.normalize().multiplyScalar(bear.speed * delta));
+                    bear.mesh.lookAt(hMesh.position.x, bear.mesh.position.y, hMesh.position.z);
+                } else {
+                    // Attack House
+                    if (bear.target.defenders >= 5) {
+                        // Defenders repel the bear!
+                        bear.target.defenders -= 5;
+                        bear.target.maxBears--;
+                        scene.remove(bear.mesh);
+                        bears.splice(i, 1);
+                        playSound('crush');
+                    } else {
+                        // Destroying house
+                        bear.target.health -= 15 * delta;
+                        if (bear.target.health <= 0) {
+                            // House Destroyed
+                            bear.target.built = false;
+                            bear.target.health = 100;
+                            bear.target.defenders = 0;
+                            bear.target.maxBears = 0;
+                            gameState.housesBuilt--;
+                            document.getElementById('houses-count').innerText = gameState.housesBuilt;
+                            
+                            // Revert house mesh to invisible placeholder
+                            bear.target.mesh.geometry.dispose();
+                            bear.target.mesh.geometry = new THREE.BoxGeometry(6, 1, 6);
+                            bear.target.mesh.material = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+                            bear.target.mesh.position.y = 0.5;
+                            bear.target.mesh.children.forEach(c => bear.target.mesh.remove(c)); // remove roof
+                            
+                            // Remove Bears attacking this house
+                            bears.forEach(b => { if(b.target === bear.target) scene.remove(b.mesh); });
+                            bears.splice(0, bears.length, ...bears.filter(b => b.target !== bear.target));
+                            playSound('hurt');
+                        }
+                    }
+                }
+            }
+
+            // 6. Update House UIs
+            const canvasBounds = renderer.domElement.getBoundingClientRect();
+            houses.forEach(house => {
+                if (house.built) {
+                    house.ui.style.display = 'block';
+                    
+                    // Update Health Bar and Text
+                    house.ui.querySelector('.def-count').innerText = house.defenders;
+                    const hpBar = house.ui.querySelector('.house-hp-bar');
+                    hpBar.style.width = `${house.health}%`;
+                    hpBar.style.backgroundColor = house.health > 50 ? '#22c55e' : (house.health > 25 ? '#eab308' : '#ef4444');
+                    
+                    // Project 3D pos to 2D screen pos
+                    const pos = house.mesh.position.clone();
+                    pos.y += 10; // offset above house
+                    pos.project(camera);
+                    
+                    const x = (pos.x * .5 + .5) * canvasBounds.width;
+                    const y = (pos.y * -.5 + .5) * canvasBounds.height;
+                    
+                    // Hide if behind camera
+                    if (pos.z > 1) {
+                        house.ui.style.display = 'none';
+                    } else {
+                        house.ui.style.left = `${x}px`;
+                        house.ui.style.top = `${y}px`;
+                    }
+                } else {
+                    house.ui.style.display = 'none';
+                }
+            });
+
+            // 7. Enemy Logic (Existing Geometric enemies)
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                enemy.mesh.position.add(enemy.dir.clone().multiplyScalar(enemy.speed * delta));
+                
+                if (Math.abs(enemy.mesh.position.x) > limit) enemy.dir.x *= -1;
+                if (Math.abs(enemy.mesh.position.z) > limit) enemy.dir.z *= -1;
+
+                enemy.mesh.rotation.x += enemy.dir.z * 5 * delta;
+                enemy.mesh.rotation.z -= enemy.dir.x * 5 * delta;
+
+                const horizontalDist = Math.hypot(playerMesh.position.x - enemy.mesh.position.x, playerMesh.position.z - enemy.mesh.position.z);
+                
+                // Giga Chad destroys basic enemies instantly
+                const crushDist = gameState.isGigaChad ? 6 : 3.5;
+                
+                if (horizontalDist < crushDist) {
+                    if (gameState.isGigaChad) {
+                        scene.remove(enemy.mesh);
+                        enemies.splice(i, 1);
+                        playSound('crush');
+                    } else {
+                        // Jump crush
+                        if (gameState.isJumping && gameState.yVelocity < 0 && playerMesh.position.y > enemy.mesh.position.y + 0.5) {
+                            scene.remove(enemy.mesh);
+                            enemies.splice(i, 1);
+                            gameState.yVelocity = 20; // Bounce up
+                            playSound('crush');
+                        } else if (Math.abs(playerMesh.position.y - enemy.mesh.position.y) < 2) {
+                            // Hurt
+                            const pushDir = playerMesh.position.clone().sub(enemy.mesh.position);
+                            pushDir.y = 0; pushDir.normalize();
+                            playerMesh.position.add(pushDir.multiplyScalar(4));
+                            enemy.dir.reflect(pushDir).normalize();
+                            takeDamage(20);
+                        }
+                    }
+                }
+            }
+
+            // 8. Build check
+            checkHouseProximity();
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

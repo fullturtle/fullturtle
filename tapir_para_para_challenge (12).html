@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tapir Para Para Challenge: Rollercoaster Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #05020a; color: #fff; font-family: 'Orbitron', sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
+        canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+        .retro-font { font-family: 'Press Start 2P', cursive; }
+        .neon-box { background: rgba(10, 5, 25, 0.85); border: 2px solid #00ffff; box-shadow: 0 0 15px rgba(0, 255, 255, 0.4), inset 0 0 10px rgba(255, 0, 255, 0.2); backdrop-filter: blur(4px); }
+        .neon-text-pink { color: #ff00ff; text-shadow: 0 0 8px #ff00ff, 0 0 16px #ff00ff, 2px 2px 0px #000; }
+        .neon-text-cyan { color: #00ffff; text-shadow: 0 0 8px #00ffff, 0 0 16px #00ffff, 2px 2px 0px #000; }
+        .neon-text-yellow { color: #ffff00; text-shadow: 0 0 8px #ffff00, 0 0 16px #ff8800, 2px 2px 0px #000; }
+        .neon-text-green { color: #00ff00; text-shadow: 0 0 8px #00ff00, 0 0 16px #00aa00, 2px 2px 0px #000; }
+        .neon-text-red { color: #ff0000; text-shadow: 0 0 8px #ff0000, 0 0 16px #aa0000, 2px 2px 0px #000; }
+        
+        .arcade-btn { background: linear-gradient(180deg, #ff00ff 0%, #990099 100%); border: 2px solid #ffffff; box-shadow: 0 4px 0 #4a004a, 0 0 10px rgba(255, 0, 255, 0.6); transition: all 0.1s ease; cursor: pointer; pointer-events: auto; }
+        .arcade-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #4a004a, 0 0 20px rgba(255, 0, 255, 0.8); background: linear-gradient(180deg, #ff33ff 0%, #b300b3 100%); }
+        .arcade-btn.selected { background: linear-gradient(180deg, #00ffff 0%, #008888 100%); box-shadow: 0 4px 0 #004a4a, 0 0 20px rgba(0, 255, 255, 0.8); }
+        .arcade-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #4a004a; }
+
+        .touch-btn { background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(0, 255, 255, 0.6); box-shadow: 0 0 8px rgba(0, 255, 255, 0.3); backdrop-filter: blur(2px); pointer-events: auto; touch-action: manipulation; transition: all 0.05s ease; }
+        .touch-btn:active { background: rgba(0, 255, 255, 0.4); transform: scale(0.95); }
+        .crt-overlay { background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%); background-size: 100% 4px; pointer-events: none; }
+        
+        #hud-container { transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease; transform-style: preserve-3d; }
+    </style>
+</head>
+<body>
+
+    <!-- OVERLAYS AND HUD -->
+    <div class="crt-overlay fixed inset-0 z-10"></div>
+
+    <div id="hud" class="fixed top-0 left-0 w-full p-4 z-20 hidden pointer-events-none perspective-1000">
+        <div id="hud-container" class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-start gap-4 origin-top">
+            
+            <div id="hud-left" class="neon-box px-4 py-2 rounded-lg flex items-center space-x-4">
+                <div>
+                    <div class="text-[10px] text-cyan-300 uppercase tracking-widest">Current Phase</div>
+                    <div id="phase-display" class="text-sm sm:text-base font-black neon-text-pink">LVL 1: TAPIR</div>
+                </div>
+                <div class="border-l border-cyan-500/40 pl-4">
+                    <div class="text-[10px] text-cyan-300 uppercase tracking-widest" id="sub-status-label">Status</div>
+                    <div id="sub-status-display" class="text-xs sm:text-sm font-bold text-yellow-300">READY</div>
+                </div>
+            </div>
+
+            <div id="cam-indicator-box" class="neon-box px-4 py-1.5 rounded-full flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+                <span class="text-[10px] font-bold tracking-wider text-white">CAM: <span id="cam-name" class="text-cyan-300">FRONT STAGE</span></span>
+            </div>
+
+            <div id="hud-right" class="neon-box px-4 py-2 rounded-lg w-full sm:w-64 flex flex-col gap-2">
+                <div>
+                    <div class="flex justify-between items-baseline mb-1">
+                        <span id="progress-label" class="text-[10px] font-bold text-cyan-300 uppercase tracking-wider">Progress</span>
+                        <span id="score-display" class="text-base sm:text-lg font-black neon-text-yellow">0 / 100</span>
+                    </div>
+                    <div class="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden border border-cyan-500/50 p-0.5">
+                        <div id="progress-bar" class="bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-yellow-400 h-full rounded-full transition-all duration-150" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- Cauliflower Tracker -->
+                <div id="cauliflower-counter" class="hidden flex justify-between items-center text-xs font-bold text-green-400 bg-green-900/40 rounded px-2 py-1 border border-green-500/50">
+                    <span>🥦 CAULIFLOWERS</span>
+                    <span id="cauli-display" class="text-sm neon-text-yellow">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEEDBACK TEXT -->
+    <div id="center-feedback" class="fixed top-1/4 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none hidden text-center w-full">
+        <div id="feedback-text" class="retro-font text-3xl md:text-5xl font-extrabold neon-text-yellow tracking-wider transition-transform duration-100">PERFECT!</div>
+    </div>
+    
+    <div id="spiral-prompt" class="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none hidden text-center w-full">
+        <div class="retro-font text-lg md:text-2xl font-black neon-text-cyan tracking-widest animate-pulse">PRESS SPACE ON RINGS!</div>
+    </div>
+
+    <!-- MAIN MENU LAYER -->
+    <div id="ui-layer" class="fixed inset-0 z-30 flex items-center justify-center p-4 backdrop-blur-sm bg-black/40">
+        <div id="start-screen" class="neon-box rounded-2xl p-6 max-w-lg w-full text-center pointer-events-auto shadow-2xl">
+            <h1 class="text-3xl md:text-4xl font-black mb-2 neon-text-cyan tracking-wider">TAPIR PARA PARA</h1>
+            <p class="text-xs text-cyan-100 mb-6 font-bold tracking-wide">Dance, jump, and ride the 3D rollercoaster curves to assemble the ultimate crew!</p>
+
+            <div class="mb-6">
+                <div class="text-pink-400 font-bold text-xs uppercase mb-2 tracking-widest">Select Difficulty</div>
+                <div class="flex gap-3 justify-center">
+                    <button class="arcade-btn difficulty-btn flex-1 py-2 rounded-lg text-xs font-black tracking-widest" data-diff="easy">EASY</button>
+                    <button class="arcade-btn difficulty-btn selected flex-1 py-2 rounded-lg text-xs font-black tracking-widest" data-diff="normal">NORMAL</button>
+                    <button class="arcade-btn difficulty-btn flex-1 py-2 rounded-lg text-xs font-black tracking-widest" data-diff="hard">HARD</button>
+                </div>
+            </div>
+
+            <div class="mb-6 bg-indigo-950/60 p-3 rounded-xl border border-indigo-400/40 text-left">
+                <label class="block text-[10px] font-bold text-yellow-300 uppercase tracking-wider mb-2" for="audio-upload">🎵 Load Custom MP3 Track (Optional)</label>
+                <input type="file" id="audio-upload" accept="audio/*" class="block w-full text-xs text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-cyan-500 file:text-black cursor-pointer hover:file:bg-cyan-400 file:transition-colors" />
+            </div>
+
+            <button id="start-btn" class="arcade-btn w-full py-4 rounded-xl font-black text-xl md:text-2xl tracking-widest uppercase text-white animate-pulse">Start Game!</button>
+        </div>
+    </div>
+
+    <!-- TOUCH CONTROLS (Mobile Support) -->
+    <div id="touch-controls" class="fixed bottom-4 left-0 w-full px-4 z-20 hidden pointer-events-none">
+        <div id="rhythm-touch" class="max-w-[250px] mx-auto grid grid-cols-3 gap-2">
+            <div class="col-start-2"><button data-dir="up" class="touch-btn w-full py-4 rounded-xl font-black text-xl text-green-400">↑</button></div>
+            <div class="col-start-1"><button data-dir="left" class="touch-btn w-full py-4 rounded-xl font-black text-xl text-red-400">←</button></div>
+            <div class="col-start-2"><button data-dir="down" class="touch-btn w-full py-4 rounded-xl font-black text-xl text-blue-400">↓</button></div>
+            <div class="col-start-3 row-start-2"><button data-dir="right" class="touch-btn w-full py-4 rounded-xl font-black text-xl text-yellow-400">→</button></div>
+        </div>
+        <div id="runner-touch" class="max-w-xl mx-auto hidden justify-between items-center gap-2">
+            <div class="flex space-x-2">
+                <button id="btn-lane-left" class="touch-btn px-5 py-4 rounded-xl font-black text-sm md:text-base text-cyan-300">◀ L</button>
+                <button id="btn-lane-right" class="touch-btn px-5 py-4 rounded-xl font-black text-sm md:text-base text-cyan-300">R ▶</button>
+            </div>
+            <div class="flex space-x-2">
+                <button id="btn-crouch" class="touch-btn px-5 py-4 rounded-xl font-black text-xs md:text-sm text-pink-400">CROUCH ▼</button>
+                <button id="btn-jump" class="touch-btn px-5 py-4 rounded-xl font-black text-xs md:text-sm text-yellow-300">JUMP ▲</button>
+            </div>
+        </div>
+        <div id="spiral-touch" class="max-w-xs mx-auto hidden">
+            <button id="btn-spiral-hit" class="touch-btn w-full py-5 rounded-2xl font-black text-2xl text-yellow-300 shadow-[0_0_15px_rgba(255,255,0,0.4)]">HIT! (SPACE)</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // GAME STATE & CONFIGURATION
+        // ==========================================
+        const DIFF_CONFIG = {
+            'easy':   { name: 'easy', bpm: 100, arrows: [60, 60, 60], runnerGoal: 10, runnerSpeed: 0.035, obsFreq: 2.2, chordChance: 0.0, reqHits: 60 },
+            'normal': { name: 'normal', bpm: 120, arrows: [100, 100, 100], runnerGoal: 20, runnerSpeed: 0.05, obsFreq: 1.5, chordChance: 0.15, reqHits: 100 },
+            'hard':   { name: 'hard', bpm: 150, arrows: [150, 150, 150], runnerGoal: 30, runnerSpeed: 0.08, obsFreq: 1.0, chordChance: 0.35, reqHits: 150 }
+        };
+        let currentDifficulty = 'normal';
+        let cfg = DIFF_CONFIG['normal'];
+        const LANE_WIDTH = 3.5;
+
+        let currentLevel = 1; 
+        let currentPhase = 'menu'; 
+        let arrowsHit = 0; let targetArrows = 0; let combo = 0;
+        let armadillosDodged = 0; let cauliflowersCollected = 0;
+
+        // Runner & Spline State
+        let currentLane = 0; let smoothLane = 0; 
+        let isJumping = false; let isCrouching = false; let tapirY = 0; let yVelocity = 0;
+        let runnerProgress = 0; let runnerTimeActive = 0; // 0.0 to 1.0 along the 3D curve
+        const GRAVITY = -48; const JUMP_STRENGTH = 18;
+        let runnerCurve = null, runnerFrenet = null;
+        const activeObstacles = [];
+
+        // Rhythm Timing
+        let SPB = 60 / cfg.bpm; 
+        const SPAWN_Y = 5.0; const TARGET_Y = -2.5; const ARROW_TRAVEL_BEATS = 2.0; let ARROW_SPEED = 0; 
+
+        // Spiral State
+        let spiralProgress = 0; let spiralHits = 0; let spiralRings = []; const TOTAL_SPIRAL_RINGS = 8;
+        let spiralCurve = null;
+
+        let audioCtx = null; let customAudioSource = null; let synthInterval = null;
+
+        // Menu Event Listeners
+        document.querySelectorAll('.difficulty-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+                e.target.classList.add('selected'); currentDifficulty = e.target.getAttribute('data-diff'); cfg = DIFF_CONFIG[currentDifficulty];
+            });
+        });
+
+        // ==========================================
+        // 3D SETUP & CAMERA
+        // ==========================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030107);
+        scene.fog = new THREE.FogExp2(0x030107, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 800);
+        scene.add(camera);
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(0.33); // Forces PS1 chunky aesthetic
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // ==========================================
+        // CHARACTER FACTORY
+        // ==========================================
+        function createLimb(color, yOffset) {
+            const geo = new THREE.BoxGeometry(0.5, 1.6, 0.5);
+            geo.translate(0, yOffset, 0);
+            return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: color, flatShading: true }));
+        }
+
+        // 1. TAPIR (The Hero)
+        const tapirRoot = new THREE.Group(); scene.add(tapirRoot);
+        const tapirSpine = new THREE.Group(); tapirSpine.position.set(0, 1.4, 0); tapirRoot.add(tapirSpine);
+        const tMatDark = 0x2a242b, tMatWhite = 0xeeeeee, tMatPink = 0xff77aa;
+        const tLower = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.2), new THREE.MeshLambertMaterial({color:tMatDark})); tLower.position.y = 0.3;
+        const tSaddle = new THREE.Mesh(new THREE.BoxGeometry(1.65, 1.3, 1.25), new THREE.MeshLambertMaterial({color:tMatWhite})); tSaddle.position.y = 1.2;
+        const tChest = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.2), new THREE.MeshLambertMaterial({color:tMatDark})); tChest.position.y = 2.0;
+        tapirSpine.add(tLower, tSaddle, tChest);
+        
+        const tHead = new THREE.Group(); tHead.position.set(0, 2.6, 0.1); tapirSpine.add(tHead);
+        tHead.add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.2), new THREE.MeshLambertMaterial({color:tMatDark})));
+        const tSnout = new THREE.Group(); tSnout.position.set(0, -0.1, 0.6); tHead.add(tSnout);
+        const tBridge = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 1.0), new THREE.MeshLambertMaterial({color:tMatDark})); tBridge.position.z=0.5; tBridge.rotation.x=0.2;
+        const tTip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshLambertMaterial({color:tMatPink})); tTip.position.set(0,-0.2,1.0); tTip.rotation.x=0.5;
+        tSnout.add(tBridge, tTip);
+        
+        const tLArm = createLimb(tMatDark, -0.7); tLArm.position.set(1.1, 2.1, 0);
+        const tRArm = createLimb(tMatDark, -0.7); tRArm.position.set(-1.1, 2.1, 0);
+        tapirSpine.add(tLArm, tRArm);
+        const tLLeg = createLimb(tMatDark, -0.7); tLLeg.position.set(0.45, 1.4, 0);
+        const tRLeg = createLimb(tMatDark, -0.7); tRLeg.position.set(-0.45, 1.4, 0);
+        tapirRoot.add(tLLeg, tRLeg);
+        tapirRoot.userData = { type: 'tapir', spine: tapirSpine, head: tHead, snout: tSnout, leftArm: tLArm, rightArm: tRArm, leftLeg: tLLeg, rightLeg: tRLeg, stanceBlend: 0 };
+
+        // 2. CAPYBARA (The Sidekick)
+        const capybaraRoot = new THREE.Group(); capybaraRoot.visible = false; scene.add(capybaraRoot);
+        const cSpine = new THREE.Group(); cSpine.position.set(0, 1.2, 0); capybaraRoot.add(cSpine);
+        const cMat = 0x8b5a2b, cMatD = 0x5c3a21;
+        const cBody = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.4), new THREE.MeshLambertMaterial({color:cMat})); cBody.position.y=0.8; cSpine.add(cBody);
+        const cHead = new THREE.Group(); cHead.position.set(0, 1.9, 0.2); cSpine.add(cHead);
+        const cSnoutMesh = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.0, 1.3), new THREE.MeshLambertMaterial({color:cMat})); cSnoutMesh.position.z=0.4; cHead.add(cSnoutMesh);
+        
+        const cLArm = createLimb(cMatD, -0.5); cLArm.position.set(1.1, 1.5, 0);
+        const cRArm = createLimb(cMatD, -0.5); cRArm.position.set(-1.1, 1.5, 0);
+        cSpine.add(cLArm, cRArm);
+        const cLLeg = createLimb(cMatD, -0.5); cLLeg.position.set(0.5, 1.2, 0);
+        const cRLeg = createLimb(cMatD, -0.5); cRLeg.position.set(-0.5, 1.2, 0);
+        capybaraRoot.add(cLLeg, cRLeg);
+        capybaraRoot.userData = { type: 'capybara', spine: cSpine, head: cHead, leftArm: cLArm, rightArm: cRArm, leftLeg: cLLeg, rightLeg: cRLeg, stanceBlend: 0 };
+
+        // 3. MACAW (The Finale Companion)
+        const macawRoot = new THREE.Group(); macawRoot.visible = false; scene.add(macawRoot);
+        const mSpine = new THREE.Group(); mSpine.position.set(0, 3.5, 0); macawRoot.add(mSpine);
+        mSpine.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, 0.8), new THREE.MeshLambertMaterial({color:0xdd1111})));
+        const mHead = new THREE.Group(); mHead.position.set(0, 1.0, 0.2); mSpine.add(mHead);
+        mHead.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.8), new THREE.MeshLambertMaterial({color:0xffffff})));
+        const mWingGeo = new THREE.BoxGeometry(2.0, 0.2, 1.0); mWingGeo.translate(1.0, 0, 0);
+        const mLWing = new THREE.Mesh(mWingGeo, new THREE.MeshLambertMaterial({color:0xffcc00})); mLWing.position.set(0.4, 0.2, 0);
+        const mRWing = new THREE.Mesh(mWingGeo, new THREE.MeshLambertMaterial({color:0x1144ff})); mRWing.position.set(-0.4, 0.2, 0); mRWing.scale.x = -1;
+        mSpine.add(mLWing, mRWing);
+        macawRoot.userData = { type: 'macaw', spine: mSpine, head: mHead, leftWing: mLWing, rightWing: mRWing };
+
+        // 4. CAMEL (The Crazy Newcomer)
+        const camelRoot = new THREE.Group(); camelRoot.visible = false; scene.add(camelRoot);
+        const cmSpine = new THREE.Group(); cmSpine.position.set(0, 1.8, 0); camelRoot.add(cmSpine);
+        const cmMat = 0xc2b280, cmMatD = 0x8c7853;
+        const cmBody = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 2.2), new THREE.MeshLambertMaterial({color:cmMat})); cmBody.position.y=0.7; cmBody.position.z=0.4; cmSpine.add(cmBody);
+        const cmHump1 = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8), new THREE.MeshLambertMaterial({color:cmMatD})); cmHump1.position.set(0, 1.6, -0.2); cmSpine.add(cmHump1);
+        const cmHump2 = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8), new THREE.MeshLambertMaterial({color:cmMatD})); cmHump2.position.set(0, 1.6, 1.0); cmSpine.add(cmHump2);
+        const cmNeck = new THREE.Group(); cmNeck.position.set(0, 1.2, -0.6); cmSpine.add(cmNeck);
+        cmNeck.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.8, 0.6), new THREE.MeshLambertMaterial({color:cmMat})));
+        const cmHead = new THREE.Group(); cmHead.position.set(0, 1.0, -0.4); cmNeck.add(cmHead);
+        cmHead.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 1.4), new THREE.MeshLambertMaterial({color:cmMat})));
+        
+        const cmLArm = createLimb(cmMatD, -0.8); cmLArm.position.set(1.0, 1.0, -0.2);
+        const cmRArm = createLimb(cmMatD, -0.8); cmRArm.position.set(-1.0, 1.0, -0.2);
+        cmSpine.add(cmLArm, cmRArm);
+        const cmLLeg = createLimb(cmMatD, -0.8); cmLLeg.position.set(0.6, 1.0, 1.2);
+        const cmRLeg = createLimb(cmMatD, -0.8); cmRLeg.position.set(-0.6, 1.0, 1.2);
+        camelRoot.add(cmLLeg, cmRLeg);
+        camelRoot.userData = { type: 'camel', spine: cmSpine, head: cmHead, neck: cmNeck, humps: [cmHump1, cmHump2], leftArm: cmLArm, rightArm: cmRArm, leftLeg: cmLLeg, rightLeg: cmRLeg, stanceBlend: 0 };
+
+        let activeDancers = [];
+
+        // ==========================================
+        // OBSTACLES & POWERUPS
+        // ==========================================
+        function createArmadillo(isHighHazard) {
+            const group = new THREE.Group();
+            const shellGeo = new THREE.IcosahedronGeometry(1.1, 1); shellGeo.scale(1.0, 0.75, 1.2);
+            const shell = new THREE.Mesh(shellGeo, new THREE.MeshLambertMaterial({ color: isHighHazard?0xff1144:0xa56128, flatShading: true }));
+            shell.position.y = 0.75; group.add(shell);
+            return group;
+        }
+
+        function createCauliflower() {
+            const group = new THREE.Group();
+            const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
+            head.position.y = 0.5; group.add(head);
+            const leafMat = new THREE.MeshLambertMaterial({ color: 0x55cc55, flatShading: true });
+            for(let i=0; i<4; i++) {
+                const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 4), leafMat);
+                leaf.position.set(Math.cos(i*Math.PI/2)*0.6, 0.4, Math.sin(i*Math.PI/2)*0.6);
+                leaf.rotateX(-Math.cos(i*Math.PI/2)*0.5); leaf.rotation.z = Math.sin(i*Math.PI/2)*0.5;
+                group.add(leaf);
+            }
+            return group;
+        }
+
+        // ==========================================
+        // STAGES
+        // ==========================================
+        // STAGE 1: DISCO
+        const discoStageGroup = new THREE.Group(); scene.add(discoStageGroup);
+        const tileMeshes = []; const tileGeo = new THREE.PlaneGeometry(2.9, 2.9).rotateX(-Math.PI/2);
+        for(let x=-6; x<=6; x++) for(let z=-10; z<=6; z++) { 
+            const hue = ((x+6)*0.08 + (z+10)*0.06)%1;
+            const tile = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({color:new THREE.Color().setHSL(hue,0.8,0.3)}));
+            tile.position.set(x*3.0, 0, z*3.0); discoStageGroup.add(tile); tileMeshes.push({mesh:tile, baseHue:hue});
+        }
+
+        // STAGE 2: SPLINE RUNNER TRACK
+        const runnerStageGroup = new THREE.Group(); runnerStageGroup.visible = false; scene.add(runnerStageGroup);
+        let instancedTrackMeshL = null, instancedTrackMeshC = null, instancedTrackMeshR = null;
+        
+        function initCurvedTrack() {
+            // Clean up previous geometry to prevent leaks
+            if (instancedTrackMeshL) { 
+                runnerStageGroup.remove(instancedTrackMeshL); runnerStageGroup.remove(instancedTrackMeshC); runnerStageGroup.remove(instancedTrackMeshR);
+                instancedTrackMeshL.geometry.dispose(); instancedTrackMeshL.material.dispose();
+                instancedTrackMeshC.geometry.dispose(); instancedTrackMeshC.material.dispose();
+                instancedTrackMeshR.geometry.dispose(); instancedTrackMeshR.material.dispose();
+            }
+            
+            const pts = [new THREE.Vector3(0, 0, 0)];
+            let cx = 0, cz = 0;
+            let dx = 0, dz = -1; // Start moving along -Z
+            
+            for(let i=0; i<35; i++) {
+                // Flat, straight segment
+                cx += dx * 50;
+                cz += dz * 50;
+                pts.push(new THREE.Vector3(cx, 0, cz));
+                
+                // Sharp 90-Degree Turn Logic (Jungle Runner Style)
+                let turnRight = Math.random() > 0.5;
+                let nx = turnRight ? -dz : dz;
+                let nz = turnRight ? dx : -dx;
+                
+                // Corner entrance
+                cx += dx * 10; cz += dz * 10;
+                pts.push(new THREE.Vector3(cx, 0, cz));
+                
+                // Corner apex (sharp transition)
+                cx += dx * 5 + nx * 5; cz += dz * 5 + nz * 5;
+                pts.push(new THREE.Vector3(cx, 0, cz));
+                
+                // Corner exit
+                cx += nx * 10; cz += nz * 10;
+                pts.push(new THREE.Vector3(cx, 0, cz));
+                
+                dx = nx; dz = nz;
+            }
+            // Final stretch
+            cx += dx * 100; cz += dz * 100;
+            pts.push(new THREE.Vector3(cx, 0, cz));
+
+            runnerCurve = new THREE.CatmullRomCurve3(pts);
+            
+            const boxGeo = new THREE.BoxGeometry(LANE_WIDTH * 0.95, 0.6, 2.0);
+            const matL = new THREE.MeshLambertMaterial({color: 0x00ffff, emissive: 0x004444 });
+            const matC = new THREE.MeshLambertMaterial({color: 0xff00ff, emissive: 0x440044 });
+            const matR = new THREE.MeshLambertMaterial({color: 0xffff00, emissive: 0x444400 });
+            
+            instancedTrackMeshL = new THREE.InstancedMesh(boxGeo, matL, 2000);
+            instancedTrackMeshC = new THREE.InstancedMesh(boxGeo, matC, 2000);
+            instancedTrackMeshR = new THREE.InstancedMesh(boxGeo, matR, 2000);
+
+            const dummy = new THREE.Object3D();
+            const worldUp = new THREE.Vector3(0, 1, 0);
+
+            for(let i=0; i<2000; i++) {
+                const t = i / 2000;
+                const pt = runnerCurve.getPointAt(t);
+                const tangent = runnerCurve.getTangentAt(t).normalize();
+                
+                // Construct stable Up/Right vectors based on World Up to prevent upside-down flipping
+                const binormal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+                const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+                const lookMat = new THREE.Matrix4().lookAt(pt, pt.clone().add(tangent), normal);
+                dummy.quaternion.setFromRotationMatrix(lookMat);
+                
+                // Left Lane
+                dummy.position.copy(pt.clone().add(binormal.clone().multiplyScalar(-LANE_WIDTH)));
+                dummy.updateMatrix();
+                instancedTrackMeshL.setMatrixAt(i, dummy.matrix);
+                
+                // Center Lane
+                dummy.position.copy(pt);
+                dummy.updateMatrix();
+                instancedTrackMeshC.setMatrixAt(i, dummy.matrix);
+                
+                // Right Lane
+                dummy.position.copy(pt.clone().add(binormal.clone().multiplyScalar(LANE_WIDTH)));
+                dummy.updateMatrix();
+                instancedTrackMeshR.setMatrixAt(i, dummy.matrix);
+            }
+            runnerStageGroup.add(instancedTrackMeshL);
+            runnerStageGroup.add(instancedTrackMeshC);
+            runnerStageGroup.add(instancedTrackMeshR);
+        }
+
+        // STAGE 3: SPIRAL INTERLUDE
+        const spiralStageGroup = new THREE.Group(); spiralStageGroup.visible = false; scene.add(spiralStageGroup);
+        let spiralTubeMesh = null;
+        
+        function initSpiralTrack() {
+            if (spiralTubeMesh) { spiralStageGroup.remove(spiralTubeMesh); spiralTubeMesh.geometry.dispose(); spiralTubeMesh.material.dispose(); }
+            
+            const sPts = [];
+            for(let i=0; i<=300; i++) {
+                let theta = (i/300) * Math.PI * 2 * 6; // 6 loops
+                let r = 2.5 + 1.2 * theta;
+                let y = Math.sin(theta * 3.0) * 12.0 + (theta * 2.0); // Wild Y axis rollercoaster
+                sPts.push(new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta)));
+            }
+            spiralCurve = new THREE.CatmullRomCurve3(sPts);
+            spiralTubeMesh = new THREE.Mesh(new THREE.TubeGeometry(spiralCurve, 400, 0.6, 8, false), new THREE.MeshBasicMaterial({ color: 0x4400aa, wireframe: true, transparent: true, opacity: 0.6 }));
+            spiralStageGroup.add(spiralTubeMesh);
+        }
+
+        // ==========================================
+        // 3D RHYTHM HIGHWAY (Anchored tight to camera)
+        // ==========================================
+        const rhythmHUD = new THREE.Group();
+        // Scale it extremely small and place it extremely close to the camera lens to prevent ANY world clipping
+        rhythmHUD.scale.set(0.08, 0.08, 0.08);
+        rhythmHUD.position.set(-0.6, 0.0, -1.0); 
+        camera.add(rhythmHUD); rhythmHUD.visible = false;
+        
+        const rLight = new THREE.PointLight(0xffffff, 1.5, 3);
+        rLight.position.set(0,0,1);
+        rhythmHUD.add(rLight);
+
+        const highwayBack = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 9.0), new THREE.MeshBasicMaterial({ color: 0x05020a, transparent: true, opacity: 0.0 }));
+        highwayBack.position.set(0, 1.25, -0.2); rhythmHUD.add(highwayBack);
+
+        const arrowTypes = ['left', 'up', 'down', 'right'];
+        const xOffsets = { 'left': -2.0, 'up': -0.66, 'down': 0.66, 'right': 2.0 };
+        const arrowColors = { 'left': 0xff2266, 'up': 0x00ff66, 'down': 0x00ccff, 'right': 0xffdd00 };
+
+        function createArrowShape() {
+            const shape = new THREE.Shape();
+            shape.moveTo(0, 1.05); shape.lineTo(1.0, 0.05); shape.lineTo(0.42, 0.05); shape.lineTo(0.42, -1.0);
+            shape.lineTo(-0.42, -1.0); shape.lineTo(-0.42, 0.05); shape.lineTo(-1.0, 0.05); shape.closePath();
+            return shape;
+        }
+        const sharedArrowGeo = new THREE.ExtrudeGeometry(createArrowShape(), { depth: 0.22, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04 });
+        sharedArrowGeo.center();
+
+        const targetReceptors = {}; const activeArrows = [];
+        arrowTypes.forEach(type => {
+            const mesh = new THREE.Mesh(sharedArrowGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.4 }));
+            mesh.position.set(xOffsets[type], TARGET_Y, 0); mesh.scale.set(0.45, 0.45, 0.45);
+            if (type === 'left') mesh.rotation.z = Math.PI/2; if (type === 'right') mesh.rotation.z = -Math.PI/2; if (type === 'down') mesh.rotation.z = Math.PI;
+            rhythmHUD.add(mesh); targetReceptors[type] = mesh;
+        });
+
+        function spawnArrow(type) {
+            const mesh = new THREE.Mesh(sharedArrowGeo, new THREE.MeshLambertMaterial({ color: arrowColors[type], emissive: arrowColors[type], emissiveIntensity: 0.6 }));
+            mesh.scale.set(0.45, 0.45, 0.45); mesh.position.set(xOffsets[type], SPAWN_Y, 0);
+            if (type === 'left') mesh.rotation.z = Math.PI/2; if (type === 'right') mesh.rotation.z = -Math.PI/2; if (type === 'down') mesh.rotation.z = Math.PI;
+            rhythmHUD.add(mesh); activeArrows.push({ type: type, y: SPAWN_Y, active: true, mesh: mesh });
+        }
+
+        // ==========================================
+        // DYNAMIC CAMERA & UI SYNC
+        // ==========================================
+        let camMode = 0; let lastCamSwitch = 0;
+        const CAM_NAMES = ["HERO CLOSEUP", "CRANE SWEEP", "360 ORBIT", "LOW ANGLE", "ZOOM OUT", "DUTCH TILT"];
+
+        function updateDynamicCamera(time, delta) {
+            if (time - lastCamSwitch > 4.5) {
+                let newMode; do { newMode = Math.floor(Math.random() * CAM_NAMES.length); } while(newMode === camMode);
+                camMode = newMode; lastCamSwitch = time; document.getElementById('cam-name').innerText = CAM_NAMES[camMode];
+                
+                // Sync HTML HUD 3D transform with camera cuts!
+                const hudContainer = document.getElementById('hud-container');
+                switch(camMode) {
+                    case 0: hudContainer.style.transform = 'scale(1.05) translateZ(20px)'; break;
+                    case 1: hudContainer.style.transform = 'translateY(25px) rotateX(5deg)'; break;
+                    case 2: hudContainer.style.transform = 'perspective(800px) rotateY(-8deg) translateX(10px)'; break;
+                    case 3: hudContainer.style.transform = 'rotateX(-10deg) translateY(-15px)'; break;
+                    case 4: hudContainer.style.transform = 'scale(0.92)'; break;
+                    case 5: hudContainer.style.transform = 'rotateZ(4deg)'; break;
+                }
+            }
+            const localT = time - lastCamSwitch;
+            const lookTarget = new THREE.Vector3(0, 3.0, 0); 
+            
+            // Adjust camera base radius depending on how many animals are on stage
+            const baseRad = currentLevel === 1 ? 6 : (currentLevel === 2 ? 8 : 12);
+            
+            switch (camMode) {
+                case 0: camera.position.lerp(new THREE.Vector3(2.5, 3.5, 5.5), delta * 2); camera.lookAt(lookTarget); camera.rotation.z = 0; break;
+                case 1: camera.position.lerp(new THREE.Vector3(0.0, 2.0 + (Math.sin(localT*1.2-Math.PI/2)*0.5+0.5)*18.0, baseRad+3), delta * 1.5); camera.lookAt(lookTarget); camera.rotation.z = 0; break;
+                case 2: const ang = localT * 1.2; camera.position.set(Math.sin(ang)*baseRad, 4.0, Math.cos(ang)*baseRad); camera.lookAt(lookTarget); camera.rotation.z = 0; break;
+                case 3: camera.position.lerp(new THREE.Vector3(-4.5, 0.5, 7.5), delta * 2); camera.lookAt(0, 4.0, -2); camera.rotation.z = 0; break;
+                case 4: camera.position.lerp(new THREE.Vector3(Math.sin(localT)*3, 8.0, baseRad+8), delta * 2); camera.lookAt(0, 2.0, 0); camera.rotation.z = 0; break;
+                case 5: camera.position.lerp(new THREE.Vector3(6.0, 4.0, 7.0), delta * 2); camera.lookAt(lookTarget); camera.rotation.z = 0.2; break; // Dutch angle
+            }
+        }
+
+        // ==========================================
+        // ANIMATION LOOP
+        // ==========================================
+        function animateCharacters(delta, time) {
+            const beatPhase = (time / SPB) * Math.PI;
+            const totalBeats = Math.floor(time / SPB);
+            
+            // Dynamic Stance Switching (Every 8 beats they switch between 2-feet and 4-feet)
+            if (currentPhase === 'rhythm' || currentPhase === 'win') {
+                tapirRoot.userData.is4Feet = (Math.floor(totalBeats / 8) % 2 === 1);
+                capybaraRoot.userData.is4Feet = (Math.floor((totalBeats+4) / 8) % 2 === 1); // Offset capybara
+                camelRoot.userData.is4Feet = (Math.floor((totalBeats+2) / 8) % 2 === 1);
+            } else { tapirRoot.userData.is4Feet = isCrouching; capybaraRoot.userData.is4Feet = true; camelRoot.userData.is4Feet = true; }
+            
+            tapirRoot.userData.stanceBlend = THREE.MathUtils.lerp(tapirRoot.userData.stanceBlend, tapirRoot.userData.is4Feet ? 1.0 : 0.0, delta * 10.0);
+            capybaraRoot.userData.stanceBlend = THREE.MathUtils.lerp(capybaraRoot.userData.stanceBlend, capybaraRoot.userData.is4Feet ? 1.0 : 0.0, delta * 10.0);
+            camelRoot.userData.stanceBlend = THREE.MathUtils.lerp(camelRoot.userData.stanceBlend, camelRoot.userData.is4Feet ? 1.0 : 0.0, delta * 10.0);
+
+            activeDancers.forEach((dancer, idx) => {
+                const ud = dancer.userData;
+                const delayPhase = beatPhase - (idx * 0.4); 
+                
+                if (currentPhase !== 'runner' && currentPhase !== 'spiral') dancer.position.y = Math.abs(Math.sin(delayPhase)) * 0.5;
+
+                if (ud.type === 'tapir' || ud.type === 'capybara' || ud.type === 'camel') {
+                    if(currentPhase !== 'runner') dancer.rotation.y = Math.sin(delayPhase * 0.5) * 0.35;
+                    
+                    if (ud.type === 'camel') {
+                        // Crazy Camel Animations!
+                        ud.neck.rotation.x = Math.sin(time * 12) * 0.6; 
+                        ud.neck.rotation.z = Math.cos(time * 15) * 0.4; 
+                        ud.humps[0].scale.setScalar(1.0 + Math.sin(time * 15) * 0.5); 
+                        ud.humps[1].scale.setScalar(1.0 + Math.cos(time * 15) * 0.5);
+                        if (currentPhase !== 'runner') dancer.rotation.z = Math.sin(time * 8) * 0.3; // wobbly body
+                    }
+
+                    ud.spine.rotation.x = ud.stanceBlend * (Math.PI / 2);
+                    ud.head.rotation.x = -ud.stanceBlend * (Math.PI / 2) + Math.sin(delayPhase * 2) * 0.15; // Snout counter-rotates to look at camera!
+                    ud.spine.position.y = THREE.MathUtils.lerp(1.4, 0.9, ud.stanceBlend);
+                    
+                    if (ud.stanceBlend < 0.5) { 
+                        // 2-Feet Para Para Hand Dance routines!
+                        const routine = Math.floor(totalBeats / 4) % (ud.type === 'tapir' ? 3 : 4);
+                        if (routine === 0) { ud.leftArm.rotation.set(-0.4, 0, 2.2 + Math.sin(delayPhase*2)*0.8); ud.rightArm.rotation.set(-0.4, 0, -2.2 + Math.sin(delayPhase*2)*0.8); } 
+                        else if (routine === 1) { ud.leftArm.rotation.set(Math.cos(delayPhase*2)*0.6, 0, 1.8 + Math.sin(delayPhase*2)*1.0); ud.rightArm.rotation.set(-Math.cos(delayPhase*2)*0.6, 0, -1.8 - Math.sin(delayPhase*2)*1.0); } 
+                        else if (routine === 2) { ud.leftArm.rotation.set(-1.0 + Math.sin(delayPhase*2)*0.6, 0, 0.5 + Math.cos(delayPhase*2)*0.6); ud.rightArm.rotation.set(-1.0 - Math.sin(delayPhase*2)*0.6, 0, -0.5 - Math.cos(delayPhase*2)*0.6); }
+                        else { ud.leftArm.rotation.set(0, 0, 2.5); ud.rightArm.rotation.set(0, 0, -2.5); dancer.rotation.y += time*8; } // Capy spins!
+                        ud.leftLeg.rotation.x = Math.sin(delayPhase * 2) * 0.4; ud.rightLeg.rotation.x = -Math.sin(delayPhase * 2) * 0.4;
+                    } else { 
+                        // 4-Feet running or grooving
+                        const runAnim = currentPhase === 'runner' ? time * 18 : delayPhase * 2;
+                        ud.leftArm.rotation.set(-Math.PI/2 + Math.sin(runAnim)*0.7, 0, 0.1); ud.rightArm.rotation.set(-Math.PI/2 - Math.sin(runAnim)*0.7, 0, -0.1);
+                        ud.leftLeg.rotation.x = -Math.sin(runAnim) * 0.7; ud.rightLeg.rotation.x = Math.sin(runAnim) * 0.7;
+                    }
+                } 
+                else if (ud.type === 'macaw') {
+                    // CRAZY MACAW ANIMATIONS!
+                    ud.spine.rotation.z = time * 8; // Constant rapid barrel rolls
+                    ud.spine.rotation.x = Math.sin(time * 10) * 0.8; // Frontflip/backflip wobble
+                    ud.leftWing.rotation.z = -0.5 + Math.sin(time*40) * 2.0; // Hyper fast wing flapping
+                    ud.rightWing.rotation.z = 0.5 - Math.sin(time*40) * 2.0;
+                    
+                    if (currentPhase !== 'runner' && currentPhase !== 'spiral') {
+                        dancer.position.x = Math.sin(time * 4) * 4; // Swoop wildly left and right
+                        dancer.position.y = 4.5 + Math.cos(time * 6) * 2; // Dive bomb up and down
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // CORE LOGIC & UI UPDATES
+        // ==========================================
+        function triggerFeedback(text, colorClass) {
+            const box = document.getElementById('center-feedback'); const label = document.getElementById('feedback-text');
+            box.classList.remove('hidden'); 
+            label.className = `retro-font text-3xl md:text-5xl font-extrabold tracking-wider transition-transform duration-100 scale-125 ${colorClass}`; 
+            label.innerText = text;
+            setTimeout(() => label.classList.remove('scale-125'), 50);
+            clearTimeout(box.hideTimeout); box.hideTimeout = setTimeout(() => box.classList.add('hidden'), 500);
+        }
+
+        function updateProgressUI() {
+            const scoreEl = document.getElementById('score-display'); const barEl = document.getElementById('progress-bar'); const labelEl = document.getElementById('progress-label');
+            if (currentPhase === 'rhythm') { labelEl.innerText = `Hits (Combo x${combo})`; scoreEl.innerText = `${arrowsHit} / ${targetArrows}`; barEl.style.width = `${Math.min(100, (arrowsHit/targetArrows)*100)}%`; } 
+            else if (currentPhase === 'runner') { labelEl.innerText = `Dodged`; scoreEl.innerText = `${armadillosDodged} / ${cfg.runnerGoal}`; barEl.style.width = `${Math.min(100, (armadillosDodged/cfg.runnerGoal)*100)}%`; } 
+            else if (currentPhase === 'spiral') { labelEl.innerText = `Rings Hit`; scoreEl.innerText = `${spiralHits} / ${TOTAL_SPIRAL_RINGS}`; barEl.style.width = `${Math.min(100, (spiralHits/TOTAL_SPIRAL_RINGS)*100)}%`; } 
+            
+            document.getElementById('cauli-display').innerText = cauliflowersCollected;
+        }
+
+        let arrowBeatCount = 0; let lastBeatTime = 0;
+        function updateRhythmPhase(delta, time) {
+            updateDynamicCamera(time, delta); animateCharacters(delta, time);
+            tileMeshes.forEach((t, idx) => { const h = (t.baseHue + time*0.15)%1; t.mesh.material.color.setHSL(h, 0.8, 0.3 + Math.sin(time*6+idx)*0.15); });
+
+            // Complex Arrow Spawning based on difficulty
+            if (time - lastBeatTime >= SPB / 2) { 
+                lastBeatTime = time; arrowBeatCount++;
+                let spawn = false; let count = 1;
+                
+                if (arrowBeatCount % 2 === 0) spawn = true; // Whole beats
+                else if (Math.random() < (cfg.name === 'hard' ? 0.7 : 0.3)) spawn = true; // Off-beats
+                
+                if (spawn && arrowsHit + activeArrows.length < targetArrows) {
+                    if (arrowBeatCount % 4 === 0 && Math.random() < cfg.chordChance) count = 2; // Chords (2 arrows at once)
+                    const used = new Set();
+                    for(let i=0; i<count; i++) {
+                        let t; do { t = arrowTypes[Math.floor(Math.random()*arrowTypes.length)]; } while(used.has(t));
+                        used.add(t); spawnArrow(t);
+                    }
+                }
+            }
+
+            for (let i = activeArrows.length - 1; i >= 0; i--) {
+                const arr = activeArrows[i]; if (!arr.active) continue;
+                arr.y -= ARROW_SPEED * delta; arr.mesh.position.y = arr.y;
+                if (arr.y < TARGET_Y - 0.9) { // Missed completely
+                    arr.active = false; rhythmHUD.remove(arr.mesh); activeArrows.splice(i, 1);
+                    combo = 0; flashReceptor(arr.type, false); triggerFeedback("MISS!", "neon-text-red"); updateProgressUI();
+                }
+            }
+        }
+
+        function checkArrowHit(type) {
+            if (currentPhase !== 'rhythm') return;
+            let closest = -1, closestDist = Infinity;
+            for (let i = 0; i < activeArrows.length; i++) {
+                if (activeArrows[i].active && activeArrows[i].type === type) {
+                    const dist = Math.abs(activeArrows[i].y - TARGET_Y);
+                    if (dist < closestDist) { closestDist = dist; closest = i; }
+                }
+            }
+            if (closest !== -1 && closestDist < 1.0) { // Hit window
+                const hitArr = activeArrows[closest]; hitArr.active = false; rhythmHUD.remove(hitArr.mesh); activeArrows.splice(closest, 1);
+                arrowsHit++; combo++; flashReceptor(type, true); playHitSound(true);
+                const isPerfect = closestDist < 0.35;
+                triggerFeedback(isPerfect ? `PERFECT! x${combo}` : `GREAT! x${combo}`, isPerfect ? "neon-text-yellow" : "neon-text-cyan"); updateProgressUI();
+                if (arrowsHit >= targetArrows) {
+                    if (currentLevel < 4) startRunnerPhase();
+                    else triggerWinPhase();
+                }
+            } else { combo = 0; flashReceptor(type, false); playHitSound(false); updateProgressUI(); }
+        }
+
+        function flashReceptor(type, hit) {
+            const mesh = targetReceptors[type]; if (!mesh) return;
+            mesh.material.color.setHex(hit ? 0x00ff88 : 0xff0044); mesh.material.opacity = 1.0; mesh.scale.setScalar(0.6);
+            setTimeout(() => { mesh.material.color.setHex(0xffffff); mesh.material.opacity = 0.4; mesh.scale.setScalar(0.45); }, 150);
+        }
+
+        // ==========================================
+        // RUNNER PHASE
+        // ==========================================
+        let lastObsSpawn = 0;
+        function startRunnerPhase() {
+            currentPhase = 'runner'; activeArrows.forEach(a => rhythmHUD.remove(a.mesh)); activeArrows.length = 0;
+            rhythmHUD.visible = false; discoStageGroup.visible = false; runnerStageGroup.visible = true;
+            
+            initCurvedTrack();
+            runnerProgress = 0; runnerTimeActive = 0; currentLane = 0; smoothLane = 0; isJumping = false; isCrouching = false; tapirY = 0; armadillosDodged = 0;
+            activeObstacles.forEach(o => scene.remove(o.mesh)); activeObstacles.length = 0;
+
+            // Make characters smaller to see the track better
+            tapirRoot.scale.setScalar(0.35); 
+            if (currentLevel >= 2) capybaraRoot.scale.setScalar(0.35);
+            if (currentLevel >= 3) macawRoot.scale.setScalar(0.35);
+            if (currentLevel >= 4) camelRoot.scale.setScalar(0.35);
+
+            document.getElementById('phase-display').innerText = "MINIGAME: DODGE!";
+            document.getElementById('sub-status-label').innerText = "Lane"; document.getElementById('sub-status-display').innerText = "CENTER";
+            document.getElementById('cam-indicator-box').classList.add('hidden');
+            document.getElementById('rhythm-touch').classList.add('hidden');
+            document.getElementById('runner-touch').classList.remove('hidden'); document.getElementById('runner-touch').classList.add('flex');
+            document.getElementById('cauliflower-counter').classList.remove('hidden');
+            updateProgressUI(); triggerFeedback(`DODGE ${cfg.runnerGoal}!`, "neon-text-cyan");
+        }
+
+        function updateRunnerPhase(delta, time) {
+            animateCharacters(delta, time);
+            
+            runnerTimeActive += delta;
+            // Speed builds up over time: starts at 50%, adds 3% per second, caps at 150%
+            const speedMultiplier = Math.min(1.5, 0.5 + (runnerTimeActive * 0.03));
+            const currentRunnerSpeed = cfg.runnerSpeed * speedMultiplier;
+
+            runnerProgress += delta * currentRunnerSpeed * (0.015 / 0.08); 
+            if (runnerProgress > 0.95) runnerProgress = 0; // Loop seamlessly to prevent going out of bounds
+
+            // Smoothly interpolate the lane changing!
+            smoothLane = THREE.MathUtils.lerp(smoothLane, currentLane, delta * 12);
+
+            const pt = runnerCurve.getPointAt(runnerProgress);
+            const tangent = runnerCurve.getTangentAt(runnerProgress).normalize();
+            
+            const worldUp = new THREE.Vector3(0, 1, 0);
+            const binormal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+            const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+            // Jump Physics
+            if (isJumping) {
+                tapirY += yVelocity * delta; yVelocity += GRAVITY * delta;
+                if (tapirY <= 0) { tapirY = 0; isJumping = false; yVelocity = 0; }
+            }
+            tapirRoot.scale.y = THREE.MathUtils.lerp(tapirRoot.scale.y, isCrouching ? 0.15 : 0.35, delta * 20); // Fast crouch squash
+
+            // Position Tapir precisely on the 3D rollercoaster using the smoothed lane
+            const targetOffset = binormal.clone().multiplyScalar(smoothLane * LANE_WIDTH);
+            const finalPos = pt.clone().add(targetOffset).add(normal.clone().multiplyScalar(tapirY + 0.4));
+            tapirRoot.position.lerp(finalPos, delta * 15);
+            
+            const lookMat = new THREE.Matrix4().lookAt(tapirRoot.position, tapirRoot.position.clone().add(tangent), normal);
+            tapirRoot.quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(lookMat), delta * 12);
+
+            // Followers directly behind you!
+            const followers = [capybaraRoot, macawRoot, camelRoot];
+            for (let i = 0; i < followers.length; i++) {
+                if (currentLevel >= i + 2) {
+                    const cT = Math.max(0, runnerProgress - 0.03 * (i + 1));
+                    const cPt = runnerCurve.getPointAt(cT);
+                    const cTangent = runnerCurve.getTangentAt(cT).normalize();
+                    const cBinormal = new THREE.Vector3().crossVectors(cTangent, worldUp).normalize();
+                    const cNormal = new THREE.Vector3().crossVectors(cBinormal, cTangent).normalize();
+                    
+                    let yOffset = tapirY + 0.4;
+                    if (i === 1) yOffset += 2.0; // Macaw flies higher
+                    
+                    const cTarget = cPt.clone().add(cBinormal.clone().multiplyScalar(smoothLane * LANE_WIDTH)).add(cNormal.clone().multiplyScalar(yOffset));
+                    followers[i].position.lerp(cTarget, delta * 15);
+                    const cLook = new THREE.Matrix4().lookAt(followers[i].position, followers[i].position.clone().add(cTangent), cNormal);
+                    followers[i].quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(cLook), delta * 15);
+                    if (i !== 1) followers[i].scale.y = tapirRoot.scale.y; // Match crouch state except macaw
+                }
+            }
+
+            // Follow Camera (Placed behind and slightly up to see sharp corners)
+            const camTarget = pt.clone().add(normal.clone().multiplyScalar(9)).sub(tangent.clone().multiplyScalar(14));
+            camera.position.lerp(camTarget, delta * 10);
+            camera.lookAt(pt.clone().add(tangent.clone().multiplyScalar(20)));
+            document.getElementById('hud-container').style.transform = 'none';
+
+            // Obstacle Spawner
+            let armadillosSpawned = activeObstacles.filter(o => o.mesh.userData.type === 'enemy').length + armadillosDodged;
+            if (time - lastObsSpawn > (cfg.obsFreq / speedMultiplier) && (cfg.runnerGoal > armadillosSpawned)) {
+                const lanes = [-1, 0, 1]; const chosen = lanes[Math.floor(Math.random() * lanes.length)];
+                const isCauli = Math.random() < 0.25; // 25% chance for a powerup
+                const obs = isCauli ? createCauliflower() : createArmadillo(Math.random() > 0.5);
+                obs.userData = { type: isCauli?'cauliflower':'enemy', lane: chosen, t: runnerProgress + 0.15, isHigh: !isCauli && Math.random()>0.5, passed: false };
+                scene.add(obs); activeObstacles.push({ mesh: obs }); lastObsSpawn = time;
+            }
+
+            // Accurate Frame-rate Independent Collision Logic
+            for (let i = activeObstacles.length - 1; i >= 0; i--) {
+                const obsData = activeObstacles[i]; const m = obsData.mesh;
+                if (!m.visible) continue;
+                
+                // Objects approach at a slower relative speed
+                m.userData.t -= delta * (currentRunnerSpeed * 0.25); // Move backwards along spline
+                if (m.userData.t <= 0) m.userData.t += 1;
+
+                const oPt = runnerCurve.getPointAt(m.userData.t);
+                const oTangent = runnerCurve.getTangentAt(m.userData.t).normalize();
+                const oBinormal = new THREE.Vector3().crossVectors(oTangent, worldUp).normalize();
+                const oNormal = new THREE.Vector3().crossVectors(oBinormal, oTangent).normalize();
+
+                m.position.copy(oPt).add(oBinormal.clone().multiplyScalar(m.userData.lane * LANE_WIDTH)).add(oNormal.clone().multiplyScalar(m.userData.isHigh?2.5:0.6));
+                m.rotation.x += delta * 12;
+
+                // Did the object pass the player plane?
+                const tDiff = m.userData.t - runnerProgress;
+                if (tDiff < 0 && !m.userData.passed) {
+                    m.userData.passed = true;
+                    // Check if player is mostly in the same lane
+                    if (Math.abs(smoothLane - m.userData.lane) < 0.6) {
+                        if (m.userData.type === 'cauliflower') {
+                            cauliflowersCollected++; playPowerupSound();
+                            m.visible = false; updateProgressUI(); triggerFeedback("+1 CAULIFLOWER!", "neon-text-green");
+                        } else {
+                            // Check Y bounds for jump/crouch
+                            if ((m.userData.isHigh && !isCrouching) || (!m.userData.isHigh && tapirY < 0.9)) {
+                                playHitSound(false); triggerFeedback("OUCH!", "neon-text-red");
+                                // We don't reset, just penalize visually. You must actually survive to dodge!
+                            } else {
+                                armadillosDodged++; playHitSound(true); updateProgressUI();
+                            }
+                        }
+                    } else if (m.userData.type !== 'cauliflower') {
+                        // Dodged by being in a different lane!
+                        armadillosDodged++; playHitSound(true); updateProgressUI();
+                    }
+                    if (armadillosDodged >= cfg.runnerGoal) { startSpiralPhase(); return; }
+                }
+                
+                // Cleanup objects far behind
+                if (tDiff < -0.05) { scene.remove(m); activeObstacles.splice(i, 1); }
+            }
+        }
+
+        // ==========================================
+        // SPIRAL PHASE
+        // ==========================================
+        function startSpiralPhase() {
+            currentPhase = 'spiral'; activeObstacles.forEach(o => scene.remove(o.mesh)); activeObstacles.length = 0;
+            runnerStageGroup.visible = false; spiralStageGroup.visible = true;
+            initSpiralTrack();
+            
+            tapirRoot.scale.setScalar(0.5); if (currentLevel >= 2) capybaraRoot.scale.setScalar(0.5);
+            if (currentLevel >= 3) macawRoot.scale.setScalar(0.5);
+            if (currentLevel >= 4) camelRoot.scale.setScalar(0.5);
+            spiralProgress = 0; spiralHits = 0; spiralRings.forEach(r => scene.remove(r.mesh)); spiralRings = [];
+
+            for(let i=1; i<=TOTAL_SPIRAL_RINGS; i++) {
+                const f = i / (TOTAL_SPIRAL_RINGS + 1);
+                const pos = spiralCurve.getPointAt(f); const tan = spiralCurve.getTangentAt(f);
+                const rMesh = new THREE.Mesh(new THREE.TorusGeometry(3.0, 0.25, 8, 20), new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true }));
+                rMesh.position.copy(pos); rMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), tan);
+                spiralStageGroup.add(rMesh); spiralRings.push({ mesh: rMesh, fraction: f, hit: false });
+            }
+
+            document.getElementById('phase-display').innerText = "INTERLUDE: SPIRAL"; document.getElementById('sub-status-display').innerText = "TIMING";
+            document.getElementById('runner-touch').classList.add('hidden'); document.getElementById('runner-touch').classList.remove('flex');
+            document.getElementById('spiral-touch').classList.remove('hidden'); document.getElementById('spiral-prompt').classList.remove('hidden');
+            document.getElementById('cauliflower-counter').classList.add('hidden'); updateProgressUI();
+        }
+
+        function updateSpiralPhase(delta, time) {
+            spiralProgress += delta * 0.05; // Base speed
+            if (spiralProgress >= 1.0) { startRhythmLevel(currentLevel + 1); return; }
+
+            const pos = spiralCurve.getPointAt(spiralProgress); const tan = spiralCurve.getTangentAt(spiralProgress);
+            tapirRoot.position.copy(pos); tapirRoot.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), tan); tapirRoot.position.y += 0.5;
+
+            const followersSpiral = [capybaraRoot, macawRoot, camelRoot];
+            for (let i = 0; i < followersSpiral.length; i++) {
+                if (currentLevel >= i + 2) {
+                    const cP = Math.max(0, spiralProgress - 0.04 * (i + 1));
+                    followersSpiral[i].position.copy(spiralCurve.getPointAt(cP)); 
+                    followersSpiral[i].quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), spiralCurve.getTangentAt(cP)); 
+                    followersSpiral[i].position.y += (i === 1 ? 2.5 : 0.5); // Macaw flies higher
+                }
+            }
+
+            animateCharacters(delta, time);
+            const camPos = pos.clone().sub(tan.clone().multiplyScalar(8)).add(new THREE.Vector3(0, 3, 0));
+            camera.position.lerp(camPos, delta * 8); 
+            camera.lookAt(pos.clone().add(tan.clone().multiplyScalar(5)));
+            document.getElementById('hud-container').style.transform = 'rotateX(8deg)';
+
+            spiralRings.forEach(r => { if(!r.hit) { r.mesh.rotation.z += delta * 3; r.mesh.scale.setScalar(1.0 + Math.sin(time*15)*0.15); } });
+        }
+
+        // ==========================================
+        // LEVEL MANAGER
+        // ==========================================
+        function startRhythmLevel(level) {
+            currentLevel = level; currentPhase = 'rhythm';
+            spiralStageGroup.visible = false; discoStageGroup.visible = true; rhythmHUD.visible = true;
+            document.getElementById('cam-indicator-box').classList.remove('hidden');
+            document.getElementById('spiral-touch').classList.add('hidden'); document.getElementById('spiral-prompt').classList.add('hidden');
+            document.getElementById('rhythm-touch').classList.remove('hidden');
+            
+            arrowsHit = 0; combo = 0; targetArrows = cfg.arrows[level-1] || cfg.arrows[cfg.arrows.length-1];
+            [tapirRoot, capybaraRoot, macawRoot, camelRoot].forEach(r => { r.rotation.set(0,0,0); r.scale.setScalar(1); });
+
+            // CONGA LINE FORMATION
+            if (level === 1) {
+                tapirRoot.position.set(0,0,0); activeDancers = [tapirRoot]; capybaraRoot.visible = false; macawRoot.visible = false; camelRoot.visible = false;
+                document.getElementById('phase-display').innerText = "LVL 1: TAPIR";
+            } else if (level === 2) {
+                // Side-by-Side dancing
+                tapirRoot.position.set(2.0,0,0); capybaraRoot.position.set(-2.0,0,0); capybaraRoot.visible = true; macawRoot.visible = false; camelRoot.visible = false;
+                activeDancers = [tapirRoot, capybaraRoot]; document.getElementById('phase-display').innerText = "LVL 2: CAPYBARA";
+                triggerFeedback("CAPYBARA JOINS!", "neon-text-pink");
+            } else if (level === 3) {
+                // Macaw joins in back
+                tapirRoot.position.set(2.5,0,2); capybaraRoot.position.set(-2.5,0,2); macawRoot.position.set(0,4.5,-4);
+                macawRoot.visible = true; camelRoot.visible = false; activeDancers = [tapirRoot, capybaraRoot, macawRoot];
+                document.getElementById('phase-display').innerText = "LVL 3: MACAW"; triggerFeedback("MACAW JOINS!", "neon-text-pink");
+            } else if (level >= 4) {
+                // Camel joins in back
+                tapirRoot.position.set(2.5,0,3); capybaraRoot.position.set(-2.5,0,3); macawRoot.position.set(0,4.5,-2); camelRoot.position.set(0,0,-5);
+                camelRoot.visible = true; activeDancers = [tapirRoot, capybaraRoot, macawRoot, camelRoot];
+                document.getElementById('phase-display').innerText = "LVL 4: CAMEL"; triggerFeedback("CAMEL JOINS!", "neon-text-pink");
+            }
+
+            if (level > 1) { SPB *= 0.90; document.getElementById('sub-status-display').innerText = "SPEED UP!"; }
+            ARROW_SPEED = (SPAWN_Y - TARGET_Y) / (ARROW_TRAVEL_BEATS * SPB);
+            updateProgressUI(); lastBeatTime = clock.getElapsedTime();
+        }
+
+        function triggerWinPhase() {
+            currentPhase = 'win'; rhythmHUD.visible = false;
+            document.getElementById('phase-display').innerText = "VICTORY!"; document.getElementById('sub-status-display').innerText = "CREW ASSEMBLED";
+            document.getElementById('touch-controls').classList.add('hidden'); triggerFeedback("ULTIMATE DANCE CREW!", "neon-text-yellow");
+            setTimeout(() => { document.getElementById('ui-layer').classList.remove('hidden'); document.getElementById('start-btn').innerText = "PLAY AGAIN!"; }, 7000);
+        }
+
+        // ==========================================
+        // INPUTS & AUDIO
+        // ==========================================
+        window.addEventListener('keydown', (e) => {
+            if (currentPhase === 'rhythm') {
+                if (['ArrowLeft','KeyA'].includes(e.code)) { e.preventDefault(); checkArrowHit('left'); }
+                if (['ArrowUp','KeyW'].includes(e.code)) { e.preventDefault(); checkArrowHit('up'); }
+                if (['ArrowDown','KeyS'].includes(e.code)) { e.preventDefault(); checkArrowHit('down'); }
+                if (['ArrowRight','KeyD'].includes(e.code)) { e.preventDefault(); checkArrowHit('right'); }
+            } else if (currentPhase === 'runner') {
+                if (['ArrowLeft','KeyA'].includes(e.code) && !e.repeat) { e.preventDefault(); currentLane = Math.max(-1, currentLane-1); document.getElementById('sub-status-display').innerText = currentLane===-1?"LEFT":currentLane===0?"CENTER":"RIGHT"; }
+                if (['ArrowRight','KeyD'].includes(e.code) && !e.repeat) { e.preventDefault(); currentLane = Math.min(1, currentLane+1); document.getElementById('sub-status-display').innerText = currentLane===-1?"LEFT":currentLane===0?"CENTER":"RIGHT"; }
+                if (['Space','ArrowUp','KeyW'].includes(e.code) && !isJumping) { e.preventDefault(); isJumping = true; isCrouching = false; yVelocity = JUMP_STRENGTH; playJumpSound(); }
+                if (['ArrowDown','KeyS'].includes(e.code)) { e.preventDefault(); isCrouching = true; }
+            } else if (currentPhase === 'spiral' && e.code === 'Space' && !e.repeat) {
+                e.preventDefault();
+                let hit = false; spiralRings.forEach(r => { if (!r.hit && Math.abs(r.fraction - spiralProgress) < 0.08) { r.hit = true; r.mesh.material.color.setHex(0xffff00); r.mesh.scale.setScalar(1.5); spiralHits++; hit=true; playHitSound(true); triggerFeedback("HIT!", "neon-text-yellow"); updateProgressUI(); } });
+                if(!hit) playHitSound(false);
+            }
+        });
+        window.addEventListener('keyup', (e) => { if (currentPhase === 'runner' && ['ArrowDown','KeyS'].includes(e.code)) isCrouching = false; });
+
+        // Touch Bindings
+        document.querySelectorAll('#rhythm-touch button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); checkArrowHit(b.getAttribute('data-dir')); }));
+        document.getElementById('btn-lane-left').addEventListener('pointerdown', e => { e.preventDefault(); currentLane = Math.max(-1, currentLane-1); document.getElementById('sub-status-display').innerText = currentLane===-1?"LEFT":currentLane===0?"CENTER":"RIGHT";});
+        document.getElementById('btn-lane-right').addEventListener('pointerdown', e => { e.preventDefault(); currentLane = Math.min(1, currentLane+1); document.getElementById('sub-status-display').innerText = currentLane===-1?"LEFT":currentLane===0?"CENTER":"RIGHT";});
+        document.getElementById('btn-jump').addEventListener('pointerdown', e => { e.preventDefault(); if(!isJumping) { isJumping = true; isCrouching = false; yVelocity = JUMP_STRENGTH; playJumpSound(); } });
+        document.getElementById('btn-crouch').addEventListener('pointerdown', e => { e.preventDefault(); isCrouching = true; });
+        document.getElementById('btn-crouch').addEventListener('pointerup', () => isCrouching = false);
+        document.getElementById('btn-spiral-hit').addEventListener('pointerdown', e => { window.dispatchEvent(new KeyboardEvent('keydown', {'code': 'Space'})); });
+
+        // Web Audio Utilities
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playHitSound(s) { if (!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type=s?'square':'sawtooth'; o.frequency.setValueAtTime(s?600:130, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(s?1200:75, audioCtx.currentTime+0.1); g.gain.setValueAtTime(0.15, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.1); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.1); }
+        function playJumpSound() { if (!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.setValueAtTime(240, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(620, audioCtx.currentTime+0.2); g.gain.setValueAtTime(0.2, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.2); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.2); }
+        function playPowerupSound() { if (!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='triangle'; o.frequency.setValueAtTime(800, audioCtx.currentTime); o.frequency.setValueAtTime(1400, audioCtx.currentTime+0.1); g.gain.setValueAtTime(0.25, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.35); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.35); }
+        
+        function startSynth() {
+            if(synthInterval) clearInterval(synthInterval);
+            let s=0; const notes=[261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 293.66, 349.23];
+            synthInterval = setInterval(()=>{ 
+                if(!audioCtx||currentPhase==='menu')return; 
+                const n=audioCtx.currentTime; 
+                if(s%2===0){ 
+                    const kO=audioCtx.createOscillator(),kG=audioCtx.createGain(); 
+                    kO.frequency.setValueAtTime(140,n); kO.frequency.exponentialRampToValueAtTime(30,n+0.2); 
+                    kG.gain.setValueAtTime(0.4,n); kG.gain.exponentialRampToValueAtTime(0.001,n+0.2); 
+                    kO.connect(kG); kG.connect(audioCtx.destination); kO.start(n); kO.stop(n+0.2); 
+                } 
+                const lO=audioCtx.createOscillator(),lG=audioCtx.createGain(); 
+                lO.type='sawtooth'; lO.frequency.setValueAtTime(notes[s%notes.length]*(s%2===1?2:1),n); 
+                lG.gain.setValueAtTime(0.08,n); lG.gain.exponentialRampToValueAtTime(0.001,n+0.15); 
+                lO.connect(lG); lG.connect(audioCtx.destination); lO.start(n); lO.stop(n+0.15); 
+                s++; 
+            }, (SPB*1000)/2);
+        }
+
+        const clock = new THREE.Clock();
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            initAudio(); if(customAudioSource){try{customAudioSource.stop();}catch(e){}customAudioSource=null;}
+            SPB = 60 / cfg.bpm; cauliflowersCollected = 0; document.getElementById('cauli-display').innerText = "0";
+            document.getElementById('ui-layer').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); document.getElementById('touch-controls').classList.remove('hidden');
+            
+            startRhythmLevel(1);
+            
+            const file = document.getElementById('audio-upload');
+            if (file.files && file.files[0]) { 
+                try { 
+                    const buf = await audioCtx.decodeAudioData(await file.files[0].arrayBuffer()); 
+                    customAudioSource=audioCtx.createBufferSource(); customAudioSource.buffer=buf; 
+                    customAudioSource.loop=true; customAudioSource.connect(audioCtx.destination); customAudioSource.start(0); 
+                } catch(e){startSynth();} 
+            } else { startSynth(); }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate); const delta = Math.min(clock.getDelta(), 0.1); const time = clock.getElapsedTime();
+            if (currentPhase === 'menu') { activeDancers = [tapirRoot]; animateCharacters(delta, time); camera.position.set(Math.sin(time*0.4)*9, 3.8, Math.cos(time*0.4)*9); camera.lookAt(0, 2.2, 0); }
+            else if (currentPhase === 'rhythm') updateRhythmPhase(delta, time);
+            else if (currentPhase === 'runner') updateRunnerPhase(delta, time);
+            else if (currentPhase === 'spiral') updateSpiralPhase(delta, time);
+            else if (currentPhase === 'win') { animateCharacters(delta, time); camera.position.set(Math.sin(time*0.8)*15, 6.5+Math.sin(time*1.5)*3, Math.cos(time*0.8)*15-4); camera.lookAt(0, 3.5, -4); document.getElementById('hud-container').style.transform = 'none'; }
+            renderer.render(scene, camera);
+        }
+        
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        window.onload = animate;
+    </script>
+</body>
+</html>

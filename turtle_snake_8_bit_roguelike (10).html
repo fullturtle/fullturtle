@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turtle Snake: 8-Bit Roguelike</title>
+    <!-- Include Tone.js for 8-bit Sound Effects and BGM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #111;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh;
+            font-family: 'Press Start 2P', monospace;
+            color: white; user-select: none; overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw; max-width: 900px;
+            aspect-ratio: 4 / 3;
+            background-color: #000;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            border: 4px solid #4a8fe7; border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block; width: 100%; height: 100%;
+            image-rendering: pixelated; image-rendering: crisp-edges;
+        }
+
+        #crt-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.20) 50%);
+            background-size: 100% 4px; pointer-events: none; z-index: 10;
+        }
+
+        #ui-layer {
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            display: flex; justify-content: space-between;
+            font-size: 10px; text-shadow: 2px 2px 0 #000;
+            pointer-events: none; z-index: 5; color: #FFF;
+        }
+
+        .ui-box { display: flex; flex-direction: column; gap: 5px; }
+        .text-yellow { color: #e6c229; } .text-red { color: #d64933; }
+        .text-blue { color: #4a8fe7; } .text-green { color: #5fb46b; }
+        .text-white { color: #f0f0f0; } .text-purple { color: #9b7ede; }
+
+        .screen {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 17, 17, 0.95);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 20; text-align: center; padding: 20px;
+        }
+
+        #start-screen { display: flex; }
+        #game-over-screen, #boon-screen { display: none; }
+
+        h1 { font-size: 28px; margin-bottom: 20px; color: #5fb46b; text-shadow: 4px 4px 0 #000, 2px 2px 0 #e6c229; line-height: 1.5; }
+        p.instructions { font-size: 10px; line-height: 1.8; color: #d0d0d0; max-width: 90%; margin-bottom: 20px; }
+        .controls-highlight { color: #e6c229; }
+
+        button.start-action {
+            font-family: 'Press Start 2P', monospace;
+            background: #5fb46b; color: white; border: 4px solid #FFF;
+            padding: 15px 20px; font-size: 14px; cursor: pointer;
+            box-shadow: 4px 4px 0 #000; transition: transform 0.1s; margin-top: 10px;
+        }
+        button.start-action:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0 #000; }
+
+        /* Boss HP UI */
+        #boss-ui {
+            position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+            display: none; flex-direction: column; align-items: center; z-index: 5;
+        }
+        #boss-name { font-size: 10px; color: #FFF; text-shadow: 2px 2px 0 #000; margin-bottom: 5px; }
+        #boss-bar-bg { width: 200px; height: 15px; background: #222; border: 2px solid #FFF; }
+        #boss-bar-fill { width: 100%; height: 100%; background: #d64933; transition: width 0.2s; }
+
+        /* Boon Cards UI */
+        #boon-cards-container {
+            display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .boon-card {
+            background: #222; border: 4px solid #FFF; border-radius: 8px;
+            padding: 15px; width: 140px; cursor: pointer; transition: transform 0.2s, background 0.2s;
+            box-shadow: 4px 4px 0 #000; display: flex; flex-direction: column; align-items: center;
+        }
+        .boon-card:hover { transform: translateY(-10px); background: #333; }
+        .boon-icon { font-size: 40px; margin-bottom: 10px; }
+        .boon-title { font-size: 10px; color: #e6c229; margin-bottom: 10px; height: 20px; }
+        .boon-desc { font-size: 8px; color: #CCC; line-height: 1.4; }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute; bottom: 10px; left: 0; right: 0;
+            display: none; justify-content: space-between; padding: 0 20px;
+            pointer-events: none; z-index: 15;
+        }
+        .d-pad, .action-buttons { display: grid; gap: 5px; pointer-events: auto; }
+        .d-pad { grid-template-columns: 45px 45px 45px; grid-template-rows: 45px 45px 45px; }
+        .action-buttons { grid-template-columns: 60px 60px; align-items: end; gap: 15px;}
+        .btn {
+            background: rgba(255,255,255,0.15); border: 2px solid #FFF; color: #FFF;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 18px; user-select: none; border-radius: 4px;
+        }
+        .btn:active { background: rgba(255,255,255,0.4); }
+        #btn-up { grid-column: 2; grid-row: 1; }
+        #btn-left { grid-column: 1; grid-row: 2; }
+        #btn-down { grid-column: 2; grid-row: 3; }
+        #btn-right { grid-column: 3; grid-row: 2; }
+        #btn-jump { width: 60px; height: 60px; border-radius: 30px; background: rgba(230, 194, 41, 0.6); }
+        #btn-throw { width: 60px; height: 60px; border-radius: 30px; background: rgba(214, 73, 51, 0.6); }
+
+        @media (max-width: 768px) {
+            #mobile-controls { display: flex; }
+            h1 { font-size: 20px; }
+            .boon-card { width: 100px; padding: 10px; }
+            .boon-icon { font-size: 24px; }
+            .boon-title { font-size: 8px; }
+            .boon-desc { font-size: 6px; }
+            p.instructions { font-size: 8px; }
+            #ui-layer { font-size: 8px; top: 5px; }
+            #boss-bar-bg { width: 120px; height: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="320" height="240"></canvas>
+        <div id="crt-overlay"></div>
+
+        <div id="ui-layer">
+            <div class="ui-box">
+                <div>SCORE: <span id="score-val" class="text-yellow">000000</span></div>
+                <div>LEVEL: <span id="level-val" class="text-green">1</span></div>
+                <div>LIVES: <span id="hp-val" class="text-red">3</span> | RIVAL: <span id="rival-hp-val" class="text-red">3</span></div>
+            </div>
+            <div class="ui-box" style="text-align: center;">
+                <div id="timer-ui" style="display:none;">TIME: <span id="time-val" class="text-white">15</span></div>
+                <div id="puyo-ui" style="display:none;" class="text-white">MATCH 4 TO CLEAR!</div>
+                <div id="status-fx" class="text-purple"></div>
+            </div>
+            <div class="ui-box" style="text-align: right;">
+                <div>ENEMIES: <span id="enemy-val" class="text-red">00</span></div>
+                <div>AMMO: <span id="fruit-val" class="text-blue">00</span></div>
+            </div>
+        </div>
+
+        <div id="boss-ui">
+            <div id="boss-name">BOSS</div>
+            <div id="boss-bar-bg"><div id="boss-bar-fill"></div></div>
+        </div>
+
+        <div id="mobile-controls">
+            <div class="d-pad">
+                <div class="btn" id="btn-up">▲</div>
+                <div class="btn" id="btn-left">◀</div>
+                <div class="btn" id="btn-down">▼</div>
+                <div class="btn" id="btn-right">▶</div>
+            </div>
+            <div class="action-buttons">
+                <div class="btn" id="btn-throw">T</div>
+                <div class="btn" id="btn-jump">J</div>
+            </div>
+        </div>
+
+        <!-- Screens -->
+        <div id="start-screen" class="screen">
+            <h1>TURTLE SNAKE<br><span class="text-yellow">ROGUELIKE</span></h1>
+            <p class="instructions">
+                <span class="controls-highlight">ARROWS</span> to Move.<br>
+                <span class="controls-highlight">[SPACE]</span> to Jump/Minigame Action.<br>
+                <span class="controls-highlight">[ENTER]</span> to Shoot Fruits.<br><br>
+                Beat enemies to clear levels! Watch out for Bosses!
+            </p>
+            <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; justify-content: center;">
+                <button id="btn-easy" class="start-action" style="background:#5fb46b;">EASY</button>
+                <button id="btn-normal" class="start-action" style="background:#e6c229; color:black;">NORMAL</button>
+                <button id="btn-hard" class="start-action" style="background:#d64933;">HARD</button>
+            </div>
+        </div>
+
+        <div id="boon-screen" class="screen">
+            <h1>LEVEL CLEARED!</h1>
+            <p class="instructions text-white">Choose your upgrade for the next stage:</p>
+            <div id="boon-cards-container"></div>
+        </div>
+
+        <div id="game-over-screen" class="screen">
+            <h1 class="text-red">GAME OVER</h1>
+            <p class="instructions" id="final-stats">SCORE: 0</p>
+            <button id="btn-restart" class="start-action">RETRY</button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Core Engine Config
+    const TILE_SIZE = 16; 
+    let GRID_W = 20; let GRID_H = 15; 
+    let RES_W = 320; let RES_H = 240;
+    
+    // High Contrast Palette
+    const PALETTE = {
+        0: null, 1: '#000000', 2: '#ffffff', 3: '#ffe827', 4: '#b347f5', 
+        5: '#27ff4b', // Neon Green (High Contrast Player)
+        6: '#ff2744', // Neon Red (High Contrast Rival)
+        7: '#4a8fe7', 8: '#e77d32', 9: '#755c48', 
+        A: '#c96b32', B: '#e5e540', C: '#8be08a', D: '#e08ae0', E: '#5ac4e8',
+        F: '#1A365D', // Brighter Navy
+        G: '#742A2A', // Brighter Crimson
+        H: '#276749', // Brighter Forest
+        I: '#7B341E', // Brighter Rust
+        J: '#44337A'  // Brighter Violet
+    };
+
+    const LEVEL_COLORS = [
+        ['F'], // Navy
+        ['G'], // Crimson
+        ['H'], // Forest
+        ['I'], // Bronze
+        ['J']  // Violet
+    ];
+
+    const SPRITES = {
+        player: [ "00555500", "05515150", "05555550", "55555555", "55555555", "05555550", "00555500", "00000000" ],
+        rival:  [ "00666600", "06616160", "06666660", "66666666", "66666666", "06666660", "00666600", "00000000" ],
+        beetle: [ "00999900", "09999990", "09199190", "09999990", "20999902", "20000002", "00000000", "00000000" ],
+        apple:  [ "00050000", "00666000", "06666600", "06616600", "06666600", "00666000", "00000000", "00000000" ],
+        banana: [ "00000B00", "0000BB00", "000BB000", "00BB0000", "000BB000", "00000B00", "00000000", "00000000" ],
+        cherry: [ "00005000", "00050500", "00500050", "06600660", "66666666", "06600660", "00000000", "00000000" ],
+        melon:  [ "00000000", "00CCCCC0", "0CC555CC", "0C55555C", "0CC555CC", "00CCCCC0", "00000000", "00000000" ],
+        basket: [ "00000000", "99999999", "91919199", "09999990", "09191990", "00999900", "00000000", "00000000" ],
+        onigiri:[ "00000000", "00022000", "00222200", "02222220", "02111120", "02111120", "00222200", "00000000" ],
+        croc:   [ "00055000", "00555500", "05155150", "55555555", "55222255", "55222255", "05555550", "00500500" ],
+        arma:   [ "00888800", "08888880", "88811888", "88888888", "88A88A88", "08888880", "00800800", "00000000" ],
+        roo:    [ "00000A00", "000AA000", "0AA1A000", "00AAAAA0", "00AA0AA0", "0A0A00A0", "0A0A00A0", "00000000" ],
+        water:  [ "00000000", "00077000", "007EE700", "007EE700", "00077000", "00000000", "00000000", "00000000" ]
+    };
+
+    const renderedSprites = {};
+    function preRenderSprites() {
+        for (const [key, data] of Object.entries(SPRITES)) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = TILE_SIZE; tempCanvas.height = TILE_SIZE;
+            const context = tempCanvas.getContext('2d');
+            const pixelSize = TILE_SIZE / 8; 
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const c = data[y][x];
+                    if (c !== '0') { context.fillStyle = PALETTE[c]; context.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize); }
+                }
+            }
+            renderedSprites[key] = tempCanvas;
+        }
+    }
+    preRenderSprites();
+
+    let synth, noiseSynth, fruitSynth;
+    let audioInit = false;
+
+    function initAudio() {
+        if (audioInit) return;
+        Tone.start();
+        Tone.Transport.bpm.value = 140;
+        
+        synth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "square" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 } }).toDestination();
+        synth.volume.value = -12;
+
+        fruitSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "pulse", width: 0.2 }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination();
+        fruitSynth.volume.value = -6; 
+
+        noiseSynth = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination();
+        noiseSynth.volume.value = -18;
+
+        audioInit = true;
+    }
+
+    function toggleBGM(play) {
+        if (!audioInit) return;
+        if (play) Tone.Transport.start(); 
+        else Tone.Transport.stop(); 
+    }
+
+        function playSound(type, param = null) {
+        if (!audioInit) return;
+        const now = Tone.now();
+        switch (type) {
+            case 'jump': synth.triggerAttackRelease("C4", "16n", now); synth.triggerAttackRelease("F4", "16n", now + 0.1); break;
+            case 'shoot': noiseSynth.triggerAttackRelease("32n", now); synth.triggerAttackRelease("G5", "32n", now); break;
+            case 'score': synth.triggerAttackRelease("C6", "16n", now); break;
+            case 'powerup': synth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "8n", now); break;
+            case 'eat': 
+                let stack = Math.min(param || 1, 10); // Cap to prevent audio engine lag
+                for (let i = 0; i < stack; i++) {
+                    const scale = [0, 2, 4, 7, 9]; // Pentatonic scale for a pleasant rising sound
+                    fruitSynth.triggerAttackRelease(Tone.Frequency("C4").transpose(scale[i%5] + (Math.floor(i/5)*12)), "32n", now + (i * 0.06));
+                }
+                break;
+            case 'hit': noiseSynth.triggerAttackRelease("16n", now); synth.triggerAttackRelease("C2", "16n", now); break;
+            case 'die': synth.triggerAttackRelease(["C3", "E3", "G3"], "8n", now); synth.triggerAttackRelease(["C2", "D#2", "F#2"], "2n", now + 0.2); break;
+            case 'level_up': synth.triggerAttackRelease("C5", "8n", now); synth.triggerAttackRelease("E5", "8n", now + 0.1); synth.triggerAttackRelease("G5", "4n", now + 0.2); break;
+        }
+    }
+
+    const FRUIT_TYPES = ['apple', 'banana', 'cherry', 'melon'];
+    const BOON_TYPES = [
+        { id: 'invincible', name: 'STAR SHIELD', desc: 'Invincibility for 10s', icon: '⭐' },
+        { id: '1up', name: '1-UP', desc: '+1 Extra Life', icon: '🍄' },
+        { id: 'steal', name: 'THIEF', desc: 'Eat rival fruits', icon: '🦊' },
+        { id: '2up', name: '2-UP', desc: '+2 Extra Lives', icon: '🍄🍄' },
+        { id: 'speed', name: 'DASH', desc: 'Move faster for 15s', icon: '⚡' },
+        { id: 'giant', name: 'BEHEMOTH', desc: 'Turn GIANT. Crush foes.', icon: '🦖' }
+    ];
+
+    let gameLoopId, lastTime = 0, accumulator = 0;
+    let TICK_RATE = 250, tickCounter = 0; // SLOWED DOWN BASE SPEED
+    let gameState = 'START'; // START, PLAYING, BASKETBALL, BOON, GAMEOVER
+    let difficulty = 'normal';
+    let level = 1, score = 0, nextMinigame = 'BASKETBALL';
+    let fruitsToCarryOver = []; 
+    let rivalFruitsToCarryOver = 0;
+    let mapGrid = [], blinkingHoles = []; 
+    let player, rival, boss, beetles = [], fruits = [], projectiles = [];
+    let pendingBoon = null;
+    let keys = { nextDir: null, jump: false, throw: false, throwHeld: false };
+    let spaceJustPressed = false;
+    let lastSpaceTime = 0;
+
+    function generateMap() {
+        GRID_W = Math.min(40, 20 + level * 2); 
+        GRID_H = Math.min(30, 15 + Math.floor(level * 1.5));
+        RES_W = GRID_W * TILE_SIZE; RES_H = GRID_H * TILE_SIZE;
+        canvas.width = RES_W; canvas.height = RES_H;
+        
+        mapGrid = [];
+        for (let x = 0; x < GRID_W; x++) {
+            mapGrid[x] = [];
+            for (let y = 0; y < GRID_H; y++) mapGrid[x][y] = 1; // 1=Solid, 0=Hole
+        }
+    }
+
+    function queueHoles(num) {
+        for (let i = 0; i < num; i++) {
+            let hx, hy, attempts = 0;
+            do {
+                hx = Math.floor(Math.random() * GRID_W); hy = Math.floor(Math.random() * GRID_H);
+                attempts++;
+            } while (attempts < 50 && ((player && Math.abs(hx - player.x) < 4) || (boss && Math.abs(hx - boss.x) < 4))); 
+            blinkingHoles.push({x: hx, y: hy, timer: 20}); 
+        }
+    }
+
+    function spawnFruit() {
+        let fx, fy, valid, attempts = 0;
+        do {
+            valid = true; fx = Math.floor(Math.random() * GRID_W); fy = Math.floor(Math.random() * GRID_H);
+            if (mapGrid[fx][fy] === 0) valid = false; 
+            attempts++;
+        } while(!valid && attempts < 50);
+        
+        let type = (level >= 2 && Math.random() < 0.05) ? 'onigiri' : FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
+        fruits.push({x: fx, y: fy, type: type});
+    }
+
+    class GridEntity {
+        constructor(x, y) { this.x = x; this.y = y; this.dir = {x: 0, y: -1}; this.active = true; }
+        getRot() {
+            if (this.dir.y === -1) return 0; if (this.dir.y === 1) return Math.PI;
+            if (this.dir.x === 1) return Math.PI/2; if (this.dir.x === -1) return -Math.PI/2;
+            return 0;
+        }
+    }
+
+    class Player extends GridEntity {
+        constructor(x, y) {
+            super(x, y);
+            this.tail = []; this.history = []; this.isJumping = false; this.jumpSteps = 0; this.zOffset = 0;
+            this.hp = 3; this.stun = 0;
+            this.buffs = { invincible: 0, speed: 0, giant: 0, steal: false };
+        }
+        
+        getBounds() {
+            if (this.buffs.giant > 0) return [{x: this.x, y: this.y}, {x: this.x+1, y: this.y}, {x: this.x, y: this.y+1}, {x: this.x+1, y: this.y+1}];
+            return [{x: this.x, y: this.y}];
+        }
+
+        update() {
+            if (!this.active) return;
+            if (this.buffs.invincible > 0) this.buffs.invincible--;
+            if (this.buffs.speed > 0) this.buffs.speed--;
+            if (this.buffs.giant > 0) this.buffs.giant--;
+
+            if (this.stun > 0) { this.stun--; return; }
+
+            if (keys.nextDir) {
+                if (this.tail.length === 0 || (this.dir.x !== -keys.nextDir.x || this.dir.y !== -keys.nextDir.y)) this.dir = { ...keys.nextDir };
+                keys.nextDir = null;
+            }
+
+            this.history.unshift({x: this.x, y: this.y});
+            if (this.history.length > this.tail.length + 1) this.history.pop(); 
+
+            let prevBounds = this.getBounds();
+            this.x = (this.x + this.dir.x + GRID_W) % GRID_W;
+            this.y = (this.y + this.dir.y + GRID_H) % GRID_H;
+            let bounds = this.getBounds();
+
+            if (this.isJumping) {
+                this.jumpSteps--;
+                if (this.jumpSteps === 1) this.zOffset = 8; 
+                if (this.jumpSteps <= 0) { this.isJumping = false; this.zOffset = 0; }
+            }
+
+            // Giant Mode specific logic
+            if (this.buffs.giant > 0 && !this.isJumping) {
+                // Destroy entities stepped on
+                for (let b of bounds) {
+                    beetles = beetles.filter(enemy => !(enemy.x === b.x && enemy.y === b.y));
+                    if (rival && rival.active && rival.x === b.x && rival.y === b.y) rival.die();
+                }
+                // Leave holes behind randomly (10% chance)
+                if (Math.random() < 0.1) {
+                    let pb = prevBounds[Math.floor(Math.random() * prevBounds.length)];
+                    mapGrid[pb.x][pb.y] = 0;
+                }
+            }
+
+            if (!this.isJumping) {
+                // Holes
+                if (bounds.some(b => mapGrid[b.x % GRID_W][b.y % GRID_H] === 0)) { this.takeDamage(99); return; }
+                
+                // Self
+                for (let i = 0; i < this.tail.length; i++) {
+                    let part = this.history[i + 1];
+                    if (part && bounds.some(b => b.x === part.x && b.y === part.y)) { this.takeDamage(99); return; }
+                }
+
+                // Rival
+                if (rival && rival.active && this.buffs.giant <= 0) {
+                    if (bounds.some(b => b.x === rival.x && b.y === rival.y)) { this.takeDamage(1); return; }
+                    for (let i = 0; i < rival.tail.length; i++) {
+                        let part = rival.history[i + 1];
+                        if (part && bounds.some(b => b.x === part.x && b.y === part.y)) {
+                            if (this.buffs.steal) {
+                                this.tail.push(rival.tail.splice(i, 1)[0]);
+                                playSound('powerup'); score+=500;
+                            } else { this.takeDamage(1); return; }
+                        }
+                    }
+                }
+
+                // Beetles
+                if (this.buffs.giant <= 0 && beetles.some(enemy => bounds.some(b => b.x === enemy.x && b.y === enemy.y))) { this.takeDamage(1); return; }
+                
+                // Boss
+                if (boss && boss.active) {
+                    let bossBounds = [{x: boss.x, y: boss.y}, {x: boss.x+1, y: boss.y}, {x: boss.x, y: boss.y+1}, {x: boss.x+1, y: boss.y+1}];
+                    if (this.buffs.giant <= 0 && bossBounds.some(bb => bounds.some(b => b.x === bb.x && b.y === bb.y))) { this.takeDamage(1); return; }
+                }
+            }
+
+            // Fruits
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                let f = fruits[i];
+                if (bounds.some(b => b.x === f.x && b.y === f.y)) {
+                    if (f.type === 'onigiri') { playSound('powerup'); fireOnigiriBeam(this); score += 300; } 
+                    else {
+                        this.tail.push(f.type); score += 100 * this.tail.length; playSound('eat', this.tail.length);
+                    }
+                    fruits.splice(i, 1); spawnFruit(); updateUI();
+                }
+            }
+        }
+
+        takeDamage(amt) {
+            if (this.buffs.invincible > 0) return;
+            this.hp -= amt;
+            this.stun = 15;
+            playSound(this.hp <= 0 ? 'die' : 'hit');
+            updateUI();
+            if (this.hp <= 0) gameOver();
+            else this.buffs.invincible = 20; // i-frames
+        }
+
+        jump() {
+            if (!this.isJumping && this.active && gameState === 'PLAYING' && this.stun === 0) {
+                this.isJumping = true; this.jumpSteps = 2; this.zOffset = 4; playSound('jump');
+            }
+        }
+
+        shoot() {
+            if (this.tail.length > 0 && this.active && gameState === 'PLAYING' && this.stun === 0) {
+                projectiles.push(new Projectile(this.x, this.y, this.dir.x, this.dir.y, this.tail.pop(), 'player'));
+                playSound('shoot'); updateUI();
+            }
+        }
+    }
+
+    class Rival extends GridEntity {
+        constructor(x, y) { super(x, y); this.tail = []; this.history = []; this.hp = 3; this.stun = 0; this.tickCounter = 0; }
+        update() {
+            if (!this.active) return;
+            if (this.stun > 0) { this.stun--; return; }
+            this.tickCounter++;
+            
+            let speedMod = (level % 5 === 0) ? 2 : 3; // SLOWED DOWN: Faster on boss levels, but overall slower
+            if (this.tickCounter % speedMod !== 0) return; 
+
+            // AI Logic: Target Boss > Enemies > Fruits
+            let target = null;
+            if (boss && boss.active) target = boss;
+            else if (beetles.length > 0 && this.tail.length > 0) target = beetles[0]; // Hunt if armed
+            else if (fruits.length > 0) target = fruits[0];
+
+            if (target) {
+                let dx = target.x - this.x; let dy = target.y - this.y;
+                // Wrap logic
+                if (Math.abs(dx) > GRID_W/2) dx = (dx > 0) ? dx - GRID_W : dx + GRID_W;
+                if (Math.abs(dy) > GRID_H/2) dy = (dy > 0) ? dy - GRID_H : dy + GRID_H;
+
+                // Shoot logic
+                if ((target === boss || beetles.includes(target)) && this.tail.length > 0) {
+                    if (dx === 0 && Math.sign(dy) === this.dir.y) { this.shoot(); return; }
+                    if (dy === 0 && Math.sign(dx) === this.dir.x) { this.shoot(); return; }
+                }
+
+                // Move logic
+                let dirs = [];
+                if (Math.abs(dx) > Math.abs(dy)) { dirs.push({x: Math.sign(dx), y: 0}); dirs.push({x: 0, y: Math.sign(dy)||1}); }
+                else { dirs.push({x: 0, y: Math.sign(dy)}); dirs.push({x: Math.sign(dx)||1, y: 0}); }
+                
+                for (let d of dirs) {
+                    let nx = (this.x + d.x + GRID_W) % GRID_W, ny = (this.y + d.y + GRID_H) % GRID_H;
+                    if (mapGrid[nx][ny] !== 0) { this.dir = d; break; }
+                }
+            }
+
+            // NEW FIX: Prevent Rival from suiciding into holes if possible
+            let nextX = (this.x + this.dir.x + GRID_W) % GRID_W;
+            let nextY = (this.y + this.dir.y + GRID_H) % GRID_H;
+            if (mapGrid[nextX][nextY] === 0) {
+                // Find any non-hole adjacent tile to avoid death
+                let safeDirs = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}].filter(d => mapGrid[(this.x+d.x+GRID_W)%GRID_W][(this.y+d.y+GRID_H)%GRID_H] !== 0);
+                if (safeDirs.length > 0) { this.dir = safeDirs[Math.floor(Math.random()*safeDirs.length)]; }
+            }
+
+            this.history.unshift({x: this.x, y: this.y});
+            if (this.history.length > this.tail.length + 1) this.history.pop(); 
+            this.x = (this.x + this.dir.x + GRID_W) % GRID_W; this.y = (this.y + this.dir.y + GRID_H) % GRID_H;
+
+            if (mapGrid[this.x][this.y] === 0) { this.die(); return; }
+
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                if (this.x === fruits[i].x && this.y === fruits[i].y) {
+                    if (fruits[i].type !== 'onigiri') this.tail.push(fruits[i].type);
+                    else { fireOnigiriBeam(this); }
+                    fruits.splice(i, 1); spawnFruit(); updateUI();
+                }
+            }
+        }
+
+        shoot() {
+            if (this.tail.length > 0) {
+                projectiles.push(new Projectile(this.x, this.y, this.dir.x, this.dir.y, this.tail.pop(), 'rival'));
+                playSound('shoot'); updateUI();
+            }
+        }
+        die() { this.active = false; this.hp = 0; updateUI(); }
+    }
+
+    class Beetle extends GridEntity {
+        constructor(x, y) { super(x, y); this.dir = {x: 1, y: 0}; }
+        update() {
+            if (Math.random() < 0.2) this.dir = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}][Math.floor(Math.random() * 4)];
+            let nx = (this.x + this.dir.x + GRID_W) % GRID_W;
+            let ny = (this.y + this.dir.y + GRID_H) % GRID_H;
+            if (mapGrid[nx][ny] === 1) { this.x = nx; this.y = ny; } else { this.dir.x *= -1; this.dir.y *= -1; }
+        }
+    }
+
+    class Projectile extends GridEntity {
+        constructor(x, y, dx, dy, type, owner) { super(x, y); this.dir = {x: dx, y: dy}; this.type = type; this.owner = owner; this.speed = 2; }
+        update() {
+            // Loop movement to travel faster than the player
+            for (let s = 0; s < this.speed; s++) {
+                if (!this.active) break;
+                
+                this.x = (this.x + this.dir.x + GRID_W) % GRID_W; this.y = (this.y + this.dir.y + GRID_H) % GRID_H;
+                
+                if (this.type === 'water') {
+                    if (player && this.x === player.x && this.y === player.y) { player.takeDamage(1); this.active = false; break; }
+                    if (rival && rival.active && this.x === rival.x && this.y === rival.y) { rival.die(); this.active = false; break; }
+                    continue;
+                }
+
+                if (player && this.owner !== 'player' && this.x === player.x && this.y === player.y) { player.takeDamage(1); this.active = false; break; }
+                if (rival && rival.active && this.owner !== 'rival' && this.x === rival.x && this.y === rival.y) { rival.die(); this.active = false; break; }
+                
+                if (boss && boss.active) {
+                    let hitX = this.x >= boss.x && this.x <= boss.x + 1;
+                    let hitY = this.y >= boss.y && this.y <= boss.y + 1;
+                    if (hitX && hitY) {
+                        boss.hp--; this.active = false; playSound('hit');
+                        if (boss.hp <= 0) boss.die();
+                        updateBossUI(); break;
+                    }
+                }
+
+                let hitBeetle = false;
+                for (let i = beetles.length - 1; i >= 0; i--) {
+                    if (beetles[i].x === this.x && beetles[i].y === this.y) {
+                        beetles.splice(i, 1); this.active = false; score += 500; playSound('score'); updateUI(); 
+                        hitBeetle = true;
+                        break;
+                    }
+                }
+                if (hitBeetle) break;
+            }
+        }
+    }
+
+    class Boss extends GridEntity {
+        constructor(x, y, type, hp) {
+            super(x, y); this.type = type; this.hp = hp; this.maxHp = hp; this.tick = 0; this.state = 'idle';
+            document.getElementById('boss-ui').style.display = 'flex';
+            document.getElementById('boss-name').innerText = type.toUpperCase();
+            updateBossUI();
+        }
+        update() {
+            if (!this.active) return;
+            this.tick++;
+            
+            if (this.type === 'croc') {
+                if (this.tick % 6 === 0) { // SLOWED DOWN
+                    // Seek player
+                    let dx = Math.sign(player.x - this.x); let dy = Math.sign(player.y - this.y);
+                    this.dir = Math.abs(player.x - this.x) > Math.abs(player.y - this.y) ? {x:dx, y:0} : {x:0, y:dy};
+                    let nx = (this.x + this.dir.x + GRID_W) % GRID_W, ny = (this.y + this.dir.y + GRID_H) % GRID_H;
+                    let canMove = true;
+                    for(let xOff=0; xOff<=1; xOff++) for(let yOff=0; yOff<=1; yOff++) if(mapGrid[(nx+xOff)%GRID_W][(ny+yOff)%GRID_H] === 0) canMove = false;
+                    if(canMove) { this.x = nx; this.y = ny; }
+                }
+                if (this.tick % 20 === 0) projectiles.push(new Projectile(this.x, this.y, this.dir.x, this.dir.y, 'water', 'boss')); // SLOWED DOWN
+            } 
+            else if (this.type === 'arma') {
+                if (this.state === 'idle' && this.tick > 15) { // SLOWED DOWN
+                    this.state = 'dash'; this.tick = 0;
+                    this.dir = Math.random() > 0.5 ? {x: Math.sign(player.x - this.x)||1, y:0} : {x:0, y:Math.sign(player.y - this.y)||1};
+                } else if (this.state === 'dash') {
+                    let nx = (this.x + this.dir.x + GRID_W) % GRID_W, ny = (this.y + this.dir.y + GRID_H) % GRID_H;
+                    let canMove = true;
+                    for(let xOff=0; xOff<=1; xOff++) for(let yOff=0; yOff<=1; yOff++) if(mapGrid[(nx+xOff)%GRID_W][(ny+yOff)%GRID_H] === 0) canMove = false;
+                    if (canMove) { this.x = nx; this.y = ny; } else { this.state = 'idle'; this.tick = 0; }
+                }
+            }
+            else if (this.type === 'roo') {
+                if (this.tick > 30) { // SLOWED DOWN
+                    mapGrid[this.x][this.y] = 0; // Leave hole
+                    this.x = (player.x + (Math.random()>0.5?2:-2) + GRID_W) % GRID_W;
+                    this.y = (player.y + (Math.random()>0.5?2:-2) + GRID_H) % GRID_H;
+                    this.tick = 0; playSound('jump');
+                }
+            }
+            
+            // Crush logic respecting 2x2 bounds and Player Giant status
+            let bossBounds = [{x: this.x, y: this.y}, {x: this.x+1, y: this.y}, {x: this.x, y: this.y+1}, {x: this.x+1, y: this.y+1}];
+            let pBounds = player.getBounds();
+            if (player.buffs.giant <= 0 && bossBounds.some(bb => pBounds.some(pb => pb.x === bb.x && pb.y === bb.y))) player.takeDamage(1);
+            else if (player.buffs.giant > 0 && bossBounds.some(bb => pBounds.some(pb => pb.x === bb.x && pb.y === bb.y))) {
+                this.hp -= 1; if(this.hp <= 0) this.die(); updateBossUI(); player.buffs.giant -= 5;
+            }
+            if (rival && rival.active && bossBounds.some(bb => bb.x === rival.x && bb.y === rival.y)) rival.die();
+        }
+        die() { this.active = false; score += 5000; playSound('level_up'); document.getElementById('boss-ui').style.display = 'none'; }
+    }
+
+    function fireOnigiriBeam(shooter) {
+        let maxDist = Math.max(GRID_W, GRID_H);
+        let bx = shooter.x, by = shooter.y;
+        for (let i = 0; i < maxDist; i++) {
+            bx = (bx + shooter.dir.x + GRID_W) % GRID_W; by = (by + shooter.dir.y + GRID_H) % GRID_H;
+            blinkingHoles.push({x: bx, y: by, timer: 15});
+            beetles = beetles.filter(b => !(b.x === bx && b.y === by));
+            if (boss && boss.active && bx >= boss.x && bx <= boss.x + 1 && by >= boss.y && by <= boss.y + 1) { boss.hp -= 2; if(boss.hp <= 0) boss.die(); updateBossUI(); }
+            let target = shooter === player ? rival : player;
+            if (target && target.active && target.x === bx && target.y === by) { if(target===player) target.takeDamage(1); else target.die(); }
+        }
+    }
+
+    const minigameState = { timer: 0, p1: null, p2: null, grid: [] };
+    
+    function startMinigame() {
+        gameState = 'BASKETBALL'; document.getElementById('timer-ui').style.display = 'block';
+        minigameState.timer = 15; minigameState.endTime = Date.now() + 15000;
+        minigameState.p1 = { score: 0, angle: 0, fruit: null, charging: false, start: 0 };
+        minigameState.p2 = { score: 0, angle: 0, fruit: null, timer: 0 };
+    }
+
+    function endMinigame() {
+        document.getElementById('timer-ui').style.display = 'none';
+        document.getElementById('puyo-ui').style.display = 'none';
+        showBoonScreen();
+    }
+
+    // Minigame Updaters (Simplified for space, logic embedded in gameLoop rendering)
+    
+    function showBoonScreen() {
+        gameState = 'BOON';
+        toggleBGM(false);
+        const container = document.getElementById('boon-cards-container');
+        container.innerHTML = '';
+        
+        // Pick 3 random boons
+        let shuffled = [...BOON_TYPES].sort(() => 0.5 - Math.random());
+        let selectedBoons = shuffled.slice(0, 3);
+        
+        selectedBoons.forEach(b => {
+            let card = document.createElement('div'); card.className = 'boon-card';
+            card.innerHTML = `<div class="boon-icon">${b.icon}</div><div class="boon-title">${b.name}</div><div class="boon-desc">${b.desc}</div>`;
+            card.onclick = () => { applyBoon(b.id); };
+            container.appendChild(card);
+        });
+        document.getElementById('boon-screen').style.display = 'flex';
+    }
+
+    function applyBoon(id) {
+        document.getElementById('boon-screen').style.display = 'none';
+        playSound('powerup');
+        if (id === '1up') player.hp++;
+        if (id === '2up') player.hp += 2;
+        if (id === 'steal') player.buffs.steal = true;
+        if (['invincible', 'speed', 'giant'].includes(id)) pendingBoon = id; // apply next level
+        
+        level++; startNewLevel();
+    }
+
+    function checkLevelClear() {
+        if (beetles.length === 0 && (!boss || !boss.active)) {
+            playSound('level_up');
+            fruitsToCarryOver = [...player.tail]; player.tail = [];
+            rivalFruitsToCarryOver = (rival && rival.active) ? rival.tail.length : 0;
+            if(rival) rival.tail = [];
+            startMinigame();
+        }
+    }
+
+    function startNewLevel() {
+        gameState = 'PLAYING';
+        toggleBGM(true);
+        generateMap();
+        
+        let diffOffset = difficulty === 'easy' ? 40 : (difficulty === 'hard' ? -40 : 0);
+        TICK_RATE = Math.max(120, 250 - (level * 5) + diffOffset); tickCounter = 0; // SLOWED DOWN BASE TICK RATE
+        
+        // Apply pending boons
+        if (pendingBoon === 'invincible') player.buffs.invincible = 75; // ~10s
+        if (pendingBoon === 'speed') player.buffs.speed = 100;
+        if (pendingBoon === 'giant') player.buffs.giant = 150;
+        pendingBoon = null;
+
+        player.x = Math.floor(GRID_W/2); player.y = Math.floor(GRID_H/2); player.history=[]; player.tail=[];
+        boss = null; beetles = []; fruits = []; projectiles = []; blinkingHoles = [];
+        
+        // NEW FIX: Rival always spawns on Level 1 regardless of difficulty
+        let rivalSpawnLevel = 1; 
+        if (level >= rivalSpawnLevel) {
+            if (!rival || !rival.active) rival = new Rival(2, 2); else { rival.x = 2; rival.y = 2; rival.rx = 2; rival.ry = 2; }
+            rival.hp = 3; rival.active = true; rival.tail = []; rival.history = [];
+        } else {
+            if (rival) rival.active = false;
+        }
+
+        if (level % 5 === 0) {
+            let types = ['croc', 'arma', 'roo'];
+            let hp = 5 * Math.pow(2, Math.floor((level - 1) / 5));
+            boss = new Boss(GRID_W-3, GRID_H-3, types[Math.floor(Math.random()*3)], hp);
+            spawnFruit(); spawnFruit(); spawnFruit(); // Boss levels need ammo!
+        } else {
+            let enemyCount = 2 + Math.floor(Math.random() * level);
+            for(let i=0; i<enemyCount; i++) {
+                let bx, by;
+                do {
+                    bx = Math.floor(Math.random() * GRID_W);
+                    by = Math.floor(Math.random() * GRID_H);
+                } while(Math.abs(bx - player.x) < 3 || mapGrid[bx][by] === 0);
+                beetles.push(new Beetle(bx, by));
+            }
+            queueHoles(Math.floor(Math.random() * level * 2));
+            spawnFruit(); spawnFruit();
+        }
+        
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('score-val').innerText = score.toString().padStart(6, '0');
+        document.getElementById('level-val').innerText = level;
+        document.getElementById('hp-val').innerText = player ? player.hp : 0;
+        document.getElementById('rival-hp-val').innerText = (rival && rival.active) ? rival.hp : 0;
+        document.getElementById('enemy-val').innerText = beetles.length.toString().padStart(2, '0');
+        document.getElementById('fruit-val').innerText = (player ? player.tail.length : 0).toString().padStart(2, '0');
+        
+        let fx = "";
+        if (player) {
+            if (player.buffs.invincible > 0) fx += "INVINCIBLE ";
+            if (player.buffs.speed > 0) fx += "SPEED ";
+            if (player.buffs.giant > 0) fx += "GIANT ";
+            if (player.buffs.steal) fx += "THIEF ";
+        }
+        document.getElementById('status-fx').innerText = fx;
+    }
+    
+    function updateBossUI() {
+        if(!boss) return;
+        let pct = Math.max(0, (boss.hp / boss.maxHp)) * 100;
+        document.getElementById('boss-bar-fill').style.width = `${pct}%`;
+    }
+
+    function gameOver() {
+        gameState = 'GAMEOVER'; toggleBGM(false); playSound('die');
+        document.getElementById('final-stats').innerText = `SCORE: ${score} | LEVEL: ${level}`;
+        document.getElementById('game-over-screen').style.display = 'flex';
+        document.getElementById('boss-ui').style.display = 'none';
+    }
+
+    function drawSprite(spriteKey, x, y, rot=0, scale=1, z=0) {
+        if (!renderedSprites[spriteKey]) return;
+        if (z > 0) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse((x * TILE_SIZE) + (TILE_SIZE/2), (y * TILE_SIZE) + (TILE_SIZE/2) + 4, 6, 3, 0, 0, Math.PI*2); ctx.fill(); }
+        ctx.save();
+        ctx.translate((x * TILE_SIZE) + (TILE_SIZE/2), (y * TILE_SIZE) + (TILE_SIZE/2) - z);
+        if (rot !== 0) ctx.rotate(rot); if (scale !== 1) ctx.scale(scale, scale);
+        ctx.drawImage(renderedSprites[spriteKey], -TILE_SIZE/2, -TILE_SIZE/2);
+        ctx.restore();
+    }
+
+    function renderMain() {
+        // OPTIMIZATION: Fill entire background once to massively improve framerate
+        ctx.fillStyle = PALETTE[LEVEL_COLORS[(level - 1) % LEVEL_COLORS.length][0]];
+        ctx.fillRect(0, 0, RES_W, RES_H);
+
+        // Draw Faint Grid Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = 0; x <= GRID_W; x++) { ctx.moveTo(x * TILE_SIZE, 0); ctx.lineTo(x * TILE_SIZE, RES_H); }
+        for (let y = 0; y <= GRID_H; y++) { ctx.moveTo(0, y * TILE_SIZE); ctx.lineTo(RES_W, y * TILE_SIZE); }
+        ctx.stroke();
+
+        // Only draw holes individually (saves ~1,200 draw calls per frame)
+        for (let x = 0; x < GRID_W; x++) {
+            for (let y = 0; y < GRID_H; y++) {
+                if (mapGrid[x][y] === 0) {
+                    ctx.fillStyle = '#000000'; 
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    ctx.fillStyle = '#0a0a0a'; 
+                    ctx.fillRect(x * TILE_SIZE + 4, y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                }
+            }
+        }
+
+        blinkingHoles.forEach(h => { ctx.fillStyle = (h.timer % 6 < 3) ? PALETTE[6] : PALETTE[2]; ctx.fillRect(h.x * TILE_SIZE, h.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
+
+        fruits.forEach(f => drawSprite(f.type, f.x, f.y));
+        beetles.forEach(b => drawSprite('beetle', b.rx || b.x, b.ry || b.y, b.getRot()));
+        projectiles.forEach(p => { if(p.active) drawSprite(p.type, p.rx || p.x, p.ry || p.y, p.getRot()); });
+
+        if (rival && rival.active) {
+            rival.history.forEach((pos, i) => { if(i>0) drawSprite(rival.tail[i-1], pos.x, pos.y); });
+            if (rival.stun === 0 || Math.floor(Date.now() / 100) % 2 === 0) drawSprite('rival', rival.rx || rival.x, rival.ry || rival.y, rival.getRot(), 1.1); // Slightly pronounced
+        }
+
+        if (player && player.active) {
+            player.history.forEach((pos, i) => { if(i>0) drawSprite(player.tail[i-1], pos.x, pos.y); });
+            if (player.stun === 0 || Math.floor(Date.now() / 100) % 2 === 0) {
+                let s = player.isJumping ? 1.4 : (player.buffs.giant > 0 ? 2 : 1.15); // Increased base scale to 1.15
+                let renderX = player.buffs.giant > 0 ? (player.rx || player.x) + 0.5 : (player.rx || player.x);
+                let renderY = player.buffs.giant > 0 ? (player.ry || player.y) + 0.5 : (player.ry || player.y);
+                
+                // Pronounced glow effect for player
+                ctx.shadowBlur = 15; 
+                ctx.shadowColor = PALETTE[5]; 
+                drawSprite('player', renderX, renderY, player.getRot(), s, player.zOffset);
+                ctx.shadowBlur = 0; // Reset
+            }
+        }
+        
+        if (boss && boss.active) drawSprite(boss.type, (boss.rx || boss.x) + 0.5, (boss.ry || boss.y) + 0.5, 0, 2);
+    }
+
+    function loop(timestamp) {
+        // Schedule next frame FIRST to ensure loop never dies during menus
+        gameLoopId = requestAnimationFrame(loop);
+        
+        if (gameState === 'GAMEOVER' || gameState === 'START' || gameState === 'BOON') return;
+        const dt = timestamp - lastTime; lastTime = timestamp;
+
+        if (gameState === 'PLAYING') {
+            accumulator += dt;
+            let currentTickRate = TICK_RATE;
+            if(player && player.buffs.speed > 0) currentTickRate *= 0.6; // Faster
+
+            if (accumulator >= currentTickRate) {
+                tickCounter++;
+                if (tickCounter % 60 === 0 && !boss) queueHoles(1); 
+
+                for (let i = blinkingHoles.length - 1; i >= 0; i--) {
+                    blinkingHoles[i].timer--;
+                    if (blinkingHoles[i].timer <= 0) { mapGrid[blinkingHoles[i].x][blinkingHoles[i].y] = 0; blinkingHoles.splice(i, 1); }
+                }
+
+                if (rival && !rival.active && Math.random() < 0.05) { 
+                    rival.hp = 3; rival.active = true; 
+                    let rx, ry, attempts = 0;
+                    // Respawn the rival in a safe, non-hole location
+                    do { 
+                        rx = Math.floor(Math.random() * GRID_W); 
+                        ry = Math.floor(Math.random() * GRID_H); 
+                        attempts++; 
+                    } while (mapGrid[rx][ry] === 0 && attempts < 50);
+                    rival.x = rx; rival.y = ry; 
+                    rival.rx = rx; rival.ry = ry; // Ensure smooth visual teleportation
+                    rival.history = []; rival.tail = [];
+                } 
+
+                if (player) player.update();
+                if (rival) rival.update();
+                if (boss) boss.update();
+                
+                projectiles.forEach(p => p.update()); projectiles = projectiles.filter(p => p.active);
+                beetles.forEach(b => b.update());
+                
+                checkLevelClear();
+                accumulator -= currentTickRate; // Properly subtract tick rather than reset to 0 to prevent frame-drop drift
+            }
+
+            // Visual Lerping for smoother framerate rendering
+            const updateLerp = (e) => {
+                if (e.rx === undefined) { e.rx = e.x; e.ry = e.y; }
+                if (Math.abs(e.x - e.rx) > 1.5) e.rx = e.x; else e.rx += (e.x - e.rx) * 0.4;
+                if (Math.abs(e.y - e.ry) > 1.5) e.ry = e.y; else e.ry += (e.y - e.ry) * 0.4;
+            };
+            if (player) updateLerp(player);
+            if (rival) updateLerp(rival);
+            if (boss) updateLerp(boss);
+            beetles.forEach(updateLerp);
+            projectiles.forEach(updateLerp);
+
+            renderMain();
+        } 
+        else if (gameState === 'BASKETBALL') {
+            // Split screen backgrounds
+            ctx.fillStyle = '#111'; ctx.fillRect(0, 0, RES_W/2, RES_H);
+            ctx.fillStyle = '#222'; ctx.fillRect(RES_W/2, 0, RES_W/2, RES_H);
+            
+            let tl = Math.ceil((minigameState.endTime - Date.now())/1000);
+            document.getElementById('time-val').innerText = Math.max(0, tl);
+            if(tl <= 0) { endMinigame(); return; }
+            
+            // P1 (Player - Left Side)
+            let p1X = RES_W * 0.25;
+            minigameState.p1.angle = Math.sin(Date.now() * 0.0015) * (Math.PI / 2.5); // SLOWED DOWN ARROW
+            drawSprite('basket', (p1X - 8)/TILE_SIZE, 4, 0, 1.5);
+            drawSprite('player', (p1X - 8)/TILE_SIZE, (RES_H - 30)/TILE_SIZE);
+            
+            ctx.strokeStyle = 'white'; ctx.beginPath(); ctx.moveTo(p1X, RES_H - 30); ctx.lineTo(p1X + Math.sin(minigameState.p1.angle)*20, RES_H - 30 - Math.cos(minigameState.p1.angle)*20); ctx.stroke();
+            
+            if(keys.throwHeld) {
+                minigameState.p1.charging = true;
+                minigameState.p1.power = Math.min((minigameState.p1.power || 0) + 0.2, 10);
+                
+                // Draw Charge Gauge
+                ctx.fillStyle = '#222';
+                ctx.fillRect(p1X - 15, RES_H - 12, 30, 6);
+                ctx.fillStyle = '#ff2744'; 
+                ctx.fillRect(p1X - 15, RES_H - 12, (minigameState.p1.power / 10) * 30, 6);
+                ctx.strokeStyle = '#FFF'; 
+                ctx.strokeRect(p1X - 15, RES_H - 12, 30, 6);
+            }
+            else if(minigameState.p1.charging) {
+                if(fruitsToCarryOver.length > 0 && !minigameState.p1.fruit) { 
+                    let pwr = minigameState.p1.power || 5;
+                    let strength = 5 + (pwr * 0.5); // Arc speed increased and scales with spacebar pressure
+                    minigameState.p1.fruit = { 
+                        x: p1X, y: RES_H-40, 
+                        vx: Math.sin(minigameState.p1.angle) * strength, 
+                        vy: -Math.cos(minigameState.p1.angle) * strength, 
+                        t: fruitsToCarryOver.pop() 
+                    }; 
+                    playSound('shoot'); 
+                }
+                minigameState.p1.charging = false;
+                minigameState.p1.power = 0;
+            }
+            if(minigameState.p1.fruit) {
+                let f = minigameState.p1.fruit; f.x += f.vx; f.y += f.vy; f.vy += 0.2;
+                // NEW FIX: Expanded hit-box threshold so the fruit accurately registers falling into the basket
+                if(f.vy > 0 && f.y > 60 && f.y < 100 && Math.abs(f.x - p1X) < 30) { 
+                    minigameState.p1.fruit = null; score+=500; playSound('score'); updateUI(); 
+                }
+                else if(f.y > RES_H) minigameState.p1.fruit = null;
+                if(f) drawSprite(f.t, f.x/TILE_SIZE, f.y/TILE_SIZE);
+            }
+
+            // P2 (Rival - Right Side)
+            let p2X = RES_W * 0.75;
+            minigameState.p2.angle = Math.cos(Date.now() * 0.0012) * (Math.PI / 2.5); // SLOWED DOWN ARROW
+            drawSprite('basket', (p2X - 8)/TILE_SIZE, 4, 0, 1.5);
+            drawSprite('rival', (p2X - 8)/TILE_SIZE, (RES_H - 30)/TILE_SIZE);
+            
+            ctx.strokeStyle = '#ff2744'; ctx.beginPath(); ctx.moveTo(p2X, RES_H - 30); ctx.lineTo(p2X + Math.sin(minigameState.p2.angle)*20, RES_H - 30 - Math.cos(minigameState.p2.angle)*20); ctx.stroke();
+
+            minigameState.p2.timer++;
+            if (minigameState.p2.timer > 45 && Math.abs(minigameState.p2.angle) < 0.2) { // SLOWED DOWN RIVAL THROW RATE
+                if (rivalFruitsToCarryOver > 0 && !minigameState.p2.fruit) {
+                    minigameState.p2.fruit = { x: p2X, y: RES_H-40, vx: Math.sin(minigameState.p2.angle)*7.5, vy: -7.5, t: 'apple' };
+                    rivalFruitsToCarryOver--;
+                    playSound('shoot');
+                }
+                minigameState.p2.timer = 0;
+            }
+            if(minigameState.p2.fruit) {
+                let f = minigameState.p2.fruit; f.x += f.vx; f.y += f.vy; f.vy += 0.2;
+                // NEW FIX: Expanded hit-box threshold for Rival's basket too
+                if(f.vy > 0 && f.y > 60 && f.y < 100 && Math.abs(f.x - p2X) < 30) { 
+                    minigameState.p2.fruit = null; playSound('hit'); 
+                }
+                else if(f.y > RES_H) minigameState.p2.fruit = null;
+                if(f) drawSprite(f.t, f.x/TILE_SIZE, f.y/TILE_SIZE);
+            }
+
+            // Draw fruit count
+            ctx.fillStyle = 'white'; ctx.font = '8px "Press Start 2P"';
+            ctx.fillText(`P1 FRUITS: ${fruitsToCarryOver.length}`, 10, RES_H - 10);
+            ctx.fillText(`P2 FRUITS: ${rivalFruitsToCarryOver}`, RES_W/2 + 10, RES_H - 10);
+        }
+
+        spaceJustPressed = false;
+    }
+    function initGame(selectedDiff) {
+        difficulty = selectedDiff || 'normal';
+        initAudio();
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('game-over-screen').style.display = 'none';
+        
+        level = 1; score = 0; player = new Player(0,0); rival = null;
+        startNewLevel();
+        
+        lastTime = performance.now(); accumulator = 0;
+        if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        gameLoopId = requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (['GAMEOVER','START','BOON'].includes(gameState)) return;
+        switch(e.code) {
+            case 'ArrowUp': keys.nextDir = {x: 0, y: -1}; break;
+            case 'ArrowDown': keys.nextDir = {x: 0, y: 1}; break;
+            case 'ArrowLeft': keys.nextDir = {x: -1, y: 0}; break;
+            case 'ArrowRight': keys.nextDir = {x: 1, y: 0}; break;
+            case 'Enter':
+            case 'NumpadEnter':
+                e.preventDefault();
+                if (gameState === 'PLAYING') player.shoot();
+                break;
+            case 'Space': 
+                e.preventDefault(); 
+                if (!keys.jump) {
+                    spaceJustPressed = true; 
+                    let now = Date.now();
+                    if (now - lastSpaceTime < 250) { // 250ms double-tap window
+                        if (gameState === 'PLAYING') player.shoot();
+                        lastSpaceTime = 0;
+                    } else {
+                        if (gameState === 'PLAYING') player.jump();
+                        lastSpaceTime = now;
+                    }
+                }
+                keys.jump = true; keys.throwHeld = true;
+                break;
+        }
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') { keys.jump = false; keys.throwHeld = false; spaceJustPressed = false; }
+    });
+
+    const bindTouch = (id, actD, actU) => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.addEventListener('touchstart', (e) => { e.preventDefault(); actD(); });
+        if(actU) el.addEventListener('touchend', (e) => { e.preventDefault(); actU(); });
+    };
+    bindTouch('btn-up', () => keys.nextDir = {x: 0, y: -1}); bindTouch('btn-down', () => keys.nextDir = {x: 0, y: 1});
+    bindTouch('btn-left', () => keys.nextDir = {x: -1, y: 0}); bindTouch('btn-right', () => keys.nextDir = {x: 1, y: 0});
+    bindTouch('btn-jump', () => { 
+        spaceJustPressed=true; keys.throwHeld=true; 
+        let now = Date.now();
+        if (now - lastSpaceTime < 250) {
+            if(gameState==='PLAYING') player.shoot();
+            lastSpaceTime = 0;
+        } else {
+            if(gameState==='PLAYING') player.jump();
+            lastSpaceTime = now;
+        }
+    }, () => { spaceJustPressed=false; keys.throwHeld=false; });
+
+    // FIX: Properly bind the mobile throw button!
+    bindTouch('btn-throw', () => {
+        if (gameState === 'PLAYING' && player) player.shoot();
+    });
+
+    document.getElementById('btn-easy').addEventListener('click', () => { initGame('easy'); });
+    document.getElementById('btn-normal').addEventListener('click', () => { initGame('normal'); });
+    document.getElementById('btn-hard').addEventListener('click', () => { initGame('hard'); });
+    document.getElementById('btn-restart').addEventListener('click', () => { initGame(difficulty); });
+
+</script>
+</body>
+</html>
