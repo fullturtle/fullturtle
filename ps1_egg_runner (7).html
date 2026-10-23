@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PS1 Egg Runner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace; /* Retro fixed-width font */
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 
+         * CRITICAL PS1 AESTHETIC SETTINGS
+         * The canvas is rendered at a low resolution (e.g., 320x240) in JS,
+         * and CSS scales it up without smoothing to create jagged, pixelated edges.
+         */
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .retro-text {
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Meter Circle Styles */
+        .meter-wrapper {
+            text-align: center;
+            display: inline-block;
+            margin: 0 10px;
+        }
+
+        .meter-circle {
+            width: 60px;
+            height: 60px;
+            background: #222;
+            border: 4px solid #888;
+            border-radius: 50%;
+            border-style: outset;
+            position: relative;
+            box-shadow: 4px 4px 0 #000;
+            margin-top: 5px;
+        }
+
+        .meter-center-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(255,255,255,0.5);
+            transform: translateX(-50%);
+            z-index: 2;
+        }
+
+        .meter-ball {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00ff00;
+            transform: translate(-50%, -50%);
+            transition: background-color 0.1s;
+            z-index: 3;
+            box-shadow: 2px 2px 0 #000;
+        }
+
+        .meter-danger .meter-ball {
+            background: #ff0000;
+        }
+        
+        .meter-warning .meter-ball {
+            background: #ff8800;
+        }
+
+        /* SMW Style UI Top Bar */
+        #smw-ui {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 24px;
+            font-weight: 900;
+            color: #fff;
+            /* Creates a thick solid black outline */
+            text-shadow: 2px 0 0 #000, -2px 0 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 2px 2px 0 #000, 3px 3px 0 #000;
+            letter-spacing: 2px;
+        }
+
+        .smw-col {
+            display: flex;
+            gap: 30px;
+        }
+
+        .smw-stat {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.1;
+        }
+
+        .text-red { color: #ff3333; }
+        .text-yellow { color: #ffcc00; }
+        
+        .smw-reserve-box {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #33ccff;
+            border-radius: 12px;
+            position: relative;
+            /* Inner and outer black stroke simulation */
+            box-shadow: 0 0 0 3px #000, inset 0 0 0 3px #000;
+            background: rgba(100, 150, 255, 0.2);
+            margin-top: 5px;
+        }
+
+        .warnings-container {
+            position: absolute;
+            top: 100px;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* NEW 2D BALANCE UI */
+        #new-balance-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            background: rgba(34, 34, 34, 0.8);
+            border: 4px solid #888;
+            border-radius: 50%;
+            border-style: outset;
+            box-shadow: 4px 4px 0 #000;
+            z-index: 25;
+            display: none; /* hidden on menu */
+        }
+        
+        .target-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 48px;
+            height: 48px;
+            border: 2px dashed #ffff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .player-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            background: #00ff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 2px 2px 0 #000;
+            transition: background-color 0.1s;
+        }
+
+        #meters-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .blinking {
+            animation: blink 0.5s infinite;
+        }
+
+        #typing-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 30;
+        }
+        .typing-word {
+            font-size: 48px;
+            color: #fff;
+            letter-spacing: 10px;
+            margin-bottom: 20px;
+        }
+        .typing-typed {
+            color: #00ff00;
+        }
+        .timer-bar-container {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border: 2px solid #fff;
+        }
+        .timer-bar {
+            width: 100%;
+            height: 100%;
+            background: #ff0000;
+        }
+
+        /* CRT Scanlines */
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0.8;
+        }
+
+        /* Menu / Game Over Screen */
+        #menu-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 20;
+        }
+
+        .retro-panel {
+            background: #0000aa;
+            border: 4px solid #fff;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 8px 8px 0 #000;
+        }
+
+        .retro-title {
+            font-size: 40px;
+            color: #ffff00;
+            margin-bottom: 20px;
+            text-shadow: 4px 4px 0 #000;
+        }
+
+        .retro-button {
+            background: #aaaaaa;
+            color: #000;
+            border: 4px solid #fff;
+            border-style: outset;
+            padding: 10px 20px;
+            font-size: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            text-transform: uppercase;
+        }
+
+        .retro-button:active {
+            border-style: inset;
+            background: #888888;
+        }
+
+        /* Touch Controls for Mobile */
+        #touch-controls {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            z-index: 5;
+            pointer-events: auto;
+        }
+        .touch-zone {
+            flex: 1;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- The low-res canvas -->
+        <canvas id="game-canvas"></canvas>
+        <!-- CRT scanline overlay -->
+        <div class="scanlines"></div>
+
+        <!-- Invisible touch zones for mobile -->
+        <div id="touch-controls">
+            <div id="touch-left" class="touch-zone"></div>
+            <div id="touch-right" class="touch-zone"></div>
+        </div>
+
+        <div id="ui-layer">
+            <div id="smw-ui">
+                <!-- Left Side: Name, Lives, Stars -->
+                <div class="smw-col">
+                    <div class="smw-stat">
+                        <span class="text-red">EGG</span>
+                        <span>x 4</span>
+                    </div>
+                    <div class="smw-stat">
+                        <span><span class="text-yellow">★</span>x 18</span>
+                    </div>
+                </div>
+
+                <!-- Middle: Item Box -->
+                <div class="smw-reserve-box"></div>
+
+                <!-- Right Side: Time, Coins, Score -->
+                <div class="smw-col" style="text-align: right;">
+                    <div class="smw-stat">
+                        <span class="text-yellow">TIME</span>
+                        <span id="time-display">000</span>
+                    </div>
+                    <div class="smw-stat">
+                        <span><span class="text-yellow" style="font-size:20px;">O</span>x 84</span>
+                        <span id="score-display">000000</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="warnings-container">
+                <div id="wind-warning" class="retro-text blinking" style="color:#00ffff; display:none; font-size: 24px;">WIND >></div>
+                <div id="typhoon-warning" class="retro-text blinking" style="color:#ff0000; display:none; font-size: 32px;">!! TYPHOON !!</div>
+            </div>
+        </div>
+
+        <!-- NEW 2D BALANCE CONTAINER OVERLAY -->
+        <div id="new-balance-container">
+            <div class="target-circle"></div>
+            <div id="player-dot" class="player-dot"></div>
+        </div>
+
+        <!-- Menu Screen -->
+        <div id="menu-screen">
+            <div class="retro-panel">
+                <h1 class="retro-title">EGG RUNNER 64</h1>
+                <p class="retro-text" style="font-size: 16px; margin-bottom: 10px;">Keep the egg balanced on the fence!</p>
+                <p class="retro-text" style="font-size: 14px; color:#ccc; margin-bottom: 10px;">Balance: ALL ARROWS (Keep dot in center)<br>Duck: S key or DOWN<br>Jump: SPACE</p>
+                <p class="retro-text blinking" style="font-size: 16px; color:#00ffff; margin-bottom: 20px;">Press SPACE to Jump over enemies!</p>
+                <div id="final-score" class="retro-text" style="font-size: 24px; color:#ffcc00; display:none;">SCORE: 0</div>
+                <button id="start-btn" class="retro-button">START RUN</button>
+            </div>
+        </div>
+        
+        <!-- Typing Screen -->
+        <div id="typing-screen">
+            <h2 class="retro-text" style="color: #ffcc00; margin-bottom: 10px;">HACK THE MAINFRAME!</h2>
+            <div id="typing-target" class="retro-text typing-word"></div>
+            <div class="timer-bar-container"><div id="typing-timer" class="timer-bar"></div></div>
+        </div>
+    </div>
+
+<script>
+    // --- Game Variables ---
+    let isPlaying = false;
+    let score = 0;
+    let speed = 15;
+    let timeAlive = 0;
+    
+    // New 2D Balance Mechanic
+    let balanceX = 0; // -1 to 1
+    let balanceY = 0; // -1 to 1
+    let balanceVelX = 0;
+    let balanceVelY = 0;
+    let kakiGrowth = 0;
+
+    // Road Curve
+    let currentCurve = 0;
+    let targetCurve = 0;
+
+    // Enemies
+    let enemies = [];
+    
+    // Jump and Wind variables
+    let yVelocity = 0;
+    let isGrounded = true;
+    let windForce = 0;
+    let windTimer = 0;
+    let isTyphoon = false;
+    
+    // Typing Minigame variables
+    let isTypingMinigame = false;
+    let typingWord = "";
+    let typingIndex = 0;
+    let typingTimeLeft = 5.0;
+    let nextTypingTarget = 15;
+    
+    // Input state
+    const keys = { left: false, right: false, up: false, down: false, a: false, d: false, jump: false, duck: false };
+
+    // DOM Elements
+    const canvas = document.getElementById('game-canvas');
+    const newBalanceContainer = document.getElementById('new-balance-container');
+    const playerDot = document.getElementById('player-dot');
+    const scoreDisplay = document.getElementById('score-display');
+    const timeDisplay = document.getElementById('time-display');
+    const menuScreen = document.getElementById('menu-screen');
+    const startBtn = document.getElementById('start-btn');
+    const finalScoreDisplay = document.getElementById('final-score');
+    const windWarning = document.getElementById('wind-warning');
+    
+    // --- Three.js Setup ---
+    // PS1 style: SNES/PS1 classic resolution 256x224
+    const INTERNAL_WIDTH = 256;
+    const INTERNAL_HEIGHT = 224;
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false });
+    renderer.setSize(INTERNAL_WIDTH, INTERNAL_HEIGHT, false); // false prevents resizing the canvas CSS
+    renderer.setPixelRatio(1); // Force 1:1 pixel ratio, no hidpi smoothing
+
+    const scene = new THREE.Scene();
+    
+    // Desert sky color
+    const skyColor = new THREE.Color(0xd2b48c);
+    scene.background = skyColor;
+    // Thick fog for PS1 draw distance limitation effect
+    scene.fog = new THREE.Fog(skyColor, 10, 60);
+
+    const camera = new THREE.PerspectiveCamera(60, INTERNAL_WIDTH / INTERNAL_HEIGHT, 0.1, 100);
+    // Position camera higher up and further behind the player
+    camera.position.set(0, 6, 10);
+    camera.lookAt(0, 2, 0);
+
+    // --- Lighting ---
+    // Bright sun, flat lighting for retro feel
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    scene.add(dirLight);
+
+    // --- Materials (PS1 Style: flat shading, basic colors) ---
+    const materialParams = { flatShading: true, roughness: 1, metalness: 0 };
+    const matEgg = new THREE.MeshStandardMaterial({ color: 0xffffee, ...materialParams });
+    const matFence = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, ...materialParams });
+    const matPost = new THREE.MeshStandardMaterial({ color: 0x5c3a21, ...materialParams });
+    
+    // Scenery Materials
+    const matAdobe = new THREE.MeshStandardMaterial({ color: 0xc2a676, ...materialParams });
+    const matRug1 = new THREE.MeshStandardMaterial({ color: 0xaa2222, ...materialParams });
+    const matRug2 = new THREE.MeshStandardMaterial({ color: 0x2288aa, ...materialParams });
+    const matPot = new THREE.MeshStandardMaterial({ color: 0xc15b3c, ...materialParams });
+    
+    const matTrunk = new THREE.MeshStandardMaterial({ color: 0x6b4423, ...materialParams });
+    const matLeaf = new THREE.MeshStandardMaterial({ color: 0x2d8a2d, ...materialParams });
+
+    // Enemy Material
+    const matEnemy = new THREE.MeshStandardMaterial({ color: 0xcc0000, ...materialParams });
+    const enemyGeo = new THREE.DodecahedronGeometry(0.35, 0); // Smaller jagged PS1 spike ball
+    const matFlyingEnemy = new THREE.MeshStandardMaterial({ color: 0x9900ff, ...materialParams });
+    const flyingGeo = new THREE.BoxGeometry(0.8, 0.4, 0.4); // Flying block
+    
+    // --- Game Objects ---
+    // 1. The Egg (Player)
+    // Use an Icosahedron with low detail for a low-poly look, scaled to be egg-shaped
+    const eggGeo = new THREE.IcosahedronGeometry(1, 1);
+    const egg = new THREE.Mesh(eggGeo, matEgg);
+    egg.scale.set(0.8, 1.2, 0.8);
+    egg.position.set(0, 2.2, 0); // Resting on the fence
+    scene.add(egg);
+    
+    // Add tiny low-poly legs to the egg to make it a "running egg"
+    const legGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+    const matLeg = new THREE.MeshStandardMaterial({ color: 0xffaa00, ...materialParams });
+    const leftLeg = new THREE.Mesh(legGeo, matLeg);
+    leftLeg.position.set(-0.4, -1, 0);
+    egg.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeo, matLeg);
+    rightLeg.position.set(0.4, -1, 0);
+    egg.add(rightLeg);
+
+    // Add arms to the egg
+    const armGeo = new THREE.BoxGeometry(0.15, 0.5, 0.15);
+    const leftArm = new THREE.Mesh(armGeo, matLeg);
+    leftArm.position.set(-0.7, 0.2, 0);
+    egg.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeo, matLeg);
+    rightArm.position.set(0.7, 0.2, 0);
+    egg.add(rightArm);
+
+    // Add Kaki (Persimmon) fruit to the top of the egg
+    const matKaki = new THREE.MeshStandardMaterial({ color: 0xff6600, ...materialParams });
+    const kakiGeo = new THREE.IcosahedronGeometry(0.4, 0); // low poly
+    const kakiGroup = new THREE.Group();
+    const kakiMesh = new THREE.Mesh(kakiGeo, matKaki);
+    kakiMesh.scale.set(1, 0.85, 1);
+    kakiGroup.add(kakiMesh);
+    
+    // Kaki leaf
+    const kakiLeafGeo = new THREE.ConeGeometry(0.15, 0.2, 3);
+    const kakiLeaf = new THREE.Mesh(kakiLeafGeo, matLeaf);
+    kakiLeaf.position.y = 0.35;
+    kakiGroup.add(kakiLeaf);
+
+    kakiGroup.position.set(0, 1.1, 0); 
+    kakiGroup.scale.set(0, 0, 0); // starts invisible
+    egg.add(kakiGroup);
+
+    // Container to manage object pooling and movement
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    // Fence Segments
+    const fences = [];
+    const fenceLength = 10;
+    const numFences = 10;
+
+    for (let i = 0; i < numFences; i++) {
+        const fenceGroup = new THREE.Group();
+        
+        // Top rail (the road)
+        const railGeo = new THREE.BoxGeometry(1.2, 0.4, fenceLength);
+        const rail = new THREE.Mesh(railGeo, matFence);
+        rail.position.y = 1;
+        fenceGroup.add(rail);
+
+        // Posts
+        const postGeo = new THREE.BoxGeometry(0.6, 2, 0.6);
+        const post1 = new THREE.Mesh(postGeo, matPost);
+        post1.position.set(0, 0, fenceLength/2 - 0.5);
+        fenceGroup.add(post1);
+        
+        const post2 = new THREE.Mesh(postGeo, matPost);
+        post2.position.set(0, 0, -fenceLength/2 + 0.5);
+        fenceGroup.add(post2);
+
+        fenceGroup.position.z = -i * fenceLength;
+        worldGroup.add(fenceGroup);
+        fences.push(fenceGroup);
+    }
+
+    // Scenery Generation (Houses, Stalls, Pots)
+    const sceneryObjects = [];
+    const numScenery = 20;
+
+    function createRandomScenery() {
+        const group = new THREE.Group();
+        const type = Math.random();
+
+        if (type < 0.5) {
+            const trunkHeight = 5 + Math.random() * 3;
+            // 5-sided cylinder for a blocky PS1 trunk
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, trunkHeight, 5), matTrunk);
+            trunk.position.y = trunkHeight / 2 - 1; 
+            // Slight random tilt for natural look
+            trunk.rotation.z = (Math.random() - 0.5) * 0.2;
+            trunk.rotation.x = (Math.random() - 0.5) * 0.2;
+            group.add(trunk);
+
+            // Generate low-poly leaves using 3-sided cones
+            const numLeaves = 4 + Math.floor(Math.random() * 3);
+            for(let j=0; j<numLeaves; j++) {
+                const leaf = new THREE.Mesh(new THREE.ConeGeometry(1.5, 5, 3), matLeaf);
+                leaf.position.y = trunkHeight - 1;
+                
+                const angle = (j / numLeaves) * Math.PI * 2;
+                leaf.rotation.y = angle;
+                leaf.rotation.x = Math.PI / 2.5; // Bend outwards
+                
+                // Shift outwards so they stem from the trunk
+                leaf.position.x = Math.sin(angle) * 1.5;
+                leaf.position.z = Math.cos(angle) * 1.5;
+                
+                group.add(leaf);
+            }
+        } else if (type < 0.8) {
+            // Market Stall
+            const stall = new THREE.Mesh(new THREE.BoxGeometry(3, 2, 3), matAdobe);
+            stall.position.y = 0;
+            group.add(stall);
+            // Angled colorful roof (Rug)
+            const roofMat = Math.random() > 0.5 ? matRug1 : matRug2;
+            const roof = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 4), roofMat);
+            roof.rotation.x = -Math.PI / 4;
+            roof.position.y = 1.5;
+            roof.position.z = 0.5;
+            group.add(roof);
+        } else {
+            // Large clay pots
+            const r = 0.5 + Math.random() * 0.5;
+            // low segment cylinder for PS1 look
+            const pot = new THREE.Mesh(new THREE.CylinderGeometry(r*0.6, r, 2, 6), matPot); 
+            pot.position.y = 0;
+            group.add(pot);
+        }
+        return group;
+    }
+
+    for (let i = 0; i < numScenery; i++) {
+        const obj = createRandomScenery();
+        // Place randomly along the Z axis (depth) and X axis (sides)
+        const side = Math.random() > 0.5 ? 1 : -1;
+        obj.position.x = side * (3 + Math.random() * 8); // Offset from the center fence
+        obj.position.z = -Math.random() * (numFences * fenceLength);
+        worldGroup.add(obj);
+        sceneryObjects.push(obj);
+    }
+
+    // Ground plane (Sand)
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    const matGround = new THREE.MeshStandardMaterial({ color: 0xcd853f, ...materialParams });
+    const ground = new THREE.Mesh(groundGeo, matGround);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -1;
+    scene.add(ground);
+
+    // --- Input Handling ---
+    window.addEventListener('keydown', (e) => {
+        if (isTypingMinigame) {
+            if (e.key.length === 1 && e.key.toUpperCase() === typingWord[typingIndex]) {
+                typingIndex++;
+                updateTypingDisplay();
+                if (typingIndex >= typingWord.length) endTypingMinigame(true);
+            }
+            return; // Block movement keys while typing
+        }
+
+        if (e.code === 'ArrowLeft') keys.left = true;
+        if (e.code === 'ArrowRight') keys.right = true;
+        if (e.code === 'ArrowUp') keys.up = true;
+        if (e.code === 'ArrowDown') { keys.down = true; keys.duck = true; }
+        if (e.code === 'KeyS') keys.duck = true;
+        if (e.code === 'KeyA') keys.a = true;
+        if (e.code === 'KeyD') keys.d = true;
+        if (e.code === 'Space') keys.jump = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft') keys.left = false;
+        if (e.code === 'ArrowRight') keys.right = false;
+        if (e.code === 'ArrowUp') keys.up = false;
+        if (e.code === 'ArrowDown') { keys.down = false; keys.duck = false; }
+        if (e.code === 'KeyS') keys.duck = false;
+        if (e.code === 'KeyA') keys.a = false;
+        if (e.code === 'KeyD') keys.d = false;
+        if (e.code === 'Space') keys.jump = false;
+    });
+
+    // Touch controls
+    const touchLeft = document.getElementById('touch-left');
+    const touchRight = document.getElementById('touch-right');
+
+    const handleTouchStart = (dir) => (e) => { e.preventDefault(); keys[dir] = true; };
+    const handleTouchEnd = (dir) => (e) => { e.preventDefault(); keys[dir] = false; };
+
+    touchLeft.addEventListener('touchstart', handleTouchStart('left'));
+    touchLeft.addEventListener('touchend', handleTouchEnd('left'));
+    touchRight.addEventListener('touchstart', handleTouchStart('right'));
+    touchRight.addEventListener('touchend', handleTouchEnd('right'));
+
+    // --- Game Logic ---
+    function resetGame() {
+        score = 0;
+        speed = 15;
+        timeAlive = 0;
+        
+        isTypingMinigame = false;
+        nextTypingTarget = 15;
+        document.getElementById('typing-screen').style.display = 'none';
+        
+        balanceX = 0;
+        balanceY = 0;
+        balanceVelX = 0;
+        balanceVelY = 0;
+        kakiGrowth = 0;
+        kakiGroup.scale.set(0,0,0);
+        newBalanceContainer.style.display = 'block';
+
+        currentCurve = 0;
+        targetCurve = 0;
+        
+        yVelocity = 0;
+        isGrounded = true;
+        windForce = 0;
+        windTimer = 2.0;
+        isTyphoon = false;
+        if(windWarning) windWarning.style.display = 'none';
+        document.getElementById('typhoon-warning').style.display = 'none';
+        
+        egg.position.set(0, 2.2, 0);
+        egg.rotation.set(0,0,0);
+        
+        // Remove old enemies
+        enemies.forEach(e => worldGroup.remove(e));
+        enemies = [];
+        
+        // Reset world positions
+        fences.forEach((f, i) => {
+            f.position.z = -i * fenceLength;
+            f.position.x = 0;
+            f.rotation.y = 0;
+            f.isThin = false;
+            f.children[0].scale.x = 1.0;
+        });
+        
+        sceneryObjects.forEach(obj => {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            obj.position.x = side * (4 + Math.random() * 8);
+            obj.position.z = -Math.random() * (numFences * fenceLength);
+            obj.originalXOffset = obj.position.x;
+        });
+
+        scoreDisplay.innerText = `000000`;
+        timeDisplay.innerText = `000`;
+        updateMeters();
+        
+        isPlaying = true;
+        menuScreen.style.display = 'none';
+        lastTime = performance.now();
+    }
+
+    startBtn.addEventListener('click', resetGame);
+
+    function startTypingMinigame() {
+        isTypingMinigame = true;
+        const words = ["BALANCE", "RUNNER", "RETRO", "TYPHOON", "DANGER", "BRIDGE", "POLYGON"];
+        typingWord = words[Math.floor(Math.random() * words.length)];
+        typingIndex = 0;
+        typingTimeLeft = 5.0;
+        document.getElementById('typing-screen').style.display = 'flex';
+        updateTypingDisplay();
+    }
+
+    function updateTypingDisplay() {
+        const typed = typingWord.substring(0, typingIndex);
+        const untyped = typingWord.substring(typingIndex);
+        document.getElementById('typing-target').innerHTML = `<span class="typing-typed">${typed}</span>${untyped}`;
+    }
+
+    function endTypingMinigame(success) {
+        isTypingMinigame = false;
+        document.getElementById('typing-screen').style.display = 'none';
+        if (!success) {
+            gameOver();
+        } else {
+            lastTime = performance.now(); // reset delta so no massive jump
+        }
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        menuScreen.style.display = 'flex';
+        newBalanceContainer.style.display = 'none';
+        finalScoreDisplay.style.display = 'block';
+        finalScoreDisplay.innerText = `FINAL DISTANCE: ${Math.floor(score)}m`;
+        startBtn.innerText = "TRY AGAIN";
+    }
+
+    function updateMeters() {
+        let posX = (balanceX + 1) / 2 * 100;
+        let posY = (balanceY + 1) / 2 * 100;
+        
+        posX = Math.max(0, Math.min(100, posX));
+        posY = Math.max(0, Math.min(100, posY));
+        
+        playerDot.style.left = `${posX}%`;
+        playerDot.style.top = `${posY}%`;
+
+        // Change color based on distance from center
+        const dist = Math.hypot(balanceX, balanceY);
+        playerDot.style.backgroundColor = dist > 0.7 ? '#ff0000' : (dist > 0.4 ? '#ff8800' : '#00ff00');
+    }
+
+    let lastTime = 0;
+
+    function animate(currentTime) {
+        requestAnimationFrame(animate);
+
+        const delta = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+        
+        if (!isPlaying || isNaN(delta)) {
+            renderer.render(scene, camera);
+            return;
+        }
+
+        if (isTypingMinigame) {
+            typingTimeLeft -= delta;
+            document.getElementById('typing-timer').style.width = `${(typingTimeLeft / 5.0) * 100}%`;
+            if (typingTimeLeft <= 0) endTypingMinigame(false);
+            renderer.render(scene, camera);
+            return;
+        }
+
+        timeAlive += delta;
+
+        // Trigger Typing minigame periodically
+        if (timeAlive > nextTypingTarget) {
+            nextTypingTarget += 25; // Trigger every 25 seconds
+            startTypingMinigame();
+            return;
+        }
+
+        // Grow Kaki Fruit over time (starts after 5 seconds, fully grows over 45 seconds)
+        if (timeAlive > 5) {
+            kakiGrowth = Math.min(1.0, kakiGrowth + delta * 0.022);
+            kakiGroup.scale.set(kakiGrowth, kakiGrowth, kakiGrowth);
+        }
+
+        // Road Curves Logic - with sudden Temple Run style sharp bends
+        if (Math.random() < 0.5 * delta) { 
+            if (Math.random() < 0.1) {
+                targetCurve = (Math.random() > 0.5 ? 1 : -1) * 0.08; // Extreme sharp turn
+            } else {
+                targetCurve = (Math.random() - 0.5) * 0.005; // Gentle random turns
+            }
+        }
+        currentCurve += (targetCurve - currentCurve) * 0.8 * delta;
+
+        // --- Wind Mechanics ---
+        windTimer -= delta;
+        if (windTimer <= 0) {
+            if (windForce === 0 && !isTyphoon) {
+                if (Math.random() < 0.15) {
+                    isTyphoon = true;
+                    windForce = (Math.random() > 0.5 ? 1 : -1) * 7.5; // Extreme force
+                    windTimer = 3.5;
+                    document.getElementById('typhoon-warning').style.display = 'block';
+                } else if (Math.random() < 0.25) {
+                    windForce = (Math.random() > 0.5 ? 1 : -1) * (2.0 + Math.random() * 2.5);
+                    windTimer = 1.0 + Math.random() * 2.0;
+                    windWarning.style.display = 'block';
+                    windWarning.innerText = windForce > 0 ? "WIND >>" : "<< WIND";
+                } else {
+                    windTimer = 2.0 + Math.random() * 3.0;
+                }
+            } else {
+                windForce = 0;
+                isTyphoon = false;
+                windTimer = 2.0 + Math.random() * 3.0;
+                windWarning.style.display = 'none';
+                document.getElementById('typhoon-warning').style.display = 'none';
+            }
+        }
+
+        // Check if the current fence directly underneath is 'thin' to ramp up difficulty
+        let currentFenceIsThin = false;
+        fences.forEach(f => {
+            if (f.position.z > -fenceLength/2 && f.position.z <= fenceLength/2) {
+                currentFenceIsThin = f.isThin;
+            }
+        });
+        
+        // Difficulty scales heavily with the Kaki growth!
+        let difficultyMultiplier = (currentFenceIsThin ? 3.0 : 1.0) * (1.0 + kakiGrowth * 1.5);
+        
+        // As kaki grows, player's control power gets sluggish
+        let controlPower = 10.0 * (1.0 - kakiGrowth * 0.45);
+
+        // --- 2D Balance Mechanics ---
+        const wobbleX = (Math.random() - 0.5) * 1.5 * difficultyMultiplier;
+        const wobbleY = (Math.random() - 0.5) * 1.5 * difficultyMultiplier;
+        
+        balanceVelX += (balanceX * 5.0 * difficultyMultiplier + wobbleX + windForce) * delta;
+        balanceVelY += (balanceY * 5.0 * difficultyMultiplier + wobbleY) * delta;
+        
+        if (keys.left) balanceVelX -= controlPower * delta;
+        if (keys.right) balanceVelX += controlPower * delta;
+        if (keys.up) balanceVelY -= controlPower * delta;
+        if (keys.down) balanceVelY += controlPower * delta;
+
+        balanceVelX *= 0.92;
+        balanceVelY *= 0.92;
+        
+        balanceX += balanceVelX * delta;
+        balanceY += balanceVelY * delta;
+
+        // --- Visual mapping: tilt the egg ---
+        egg.rotation.z = -balanceX * (Math.PI / 4); 
+        egg.rotation.x = balanceY * (Math.PI / 6); // Lean forward/backward slightly
+        egg.position.x = balanceX * 0.8;
+
+        // --- Jump & Duck Mechanics ---
+        if (keys.jump && isGrounded && !keys.duck) {
+            yVelocity = 20; // Increased jump velocity for a much higher jump
+            isGrounded = false;
+        }
+
+        const time = currentTime * 0.015;
+        if (!isGrounded) {
+            yVelocity -= 25 * delta;
+            egg.position.y += yVelocity * delta;
+            
+            const dist = Math.hypot(balanceX, balanceY);
+            if (egg.position.y <= 2.2 && dist <= 1.0) {
+                egg.position.y = 2.2;
+                isGrounded = true;
+                yVelocity = 0;
+            }
+        } else {
+            if (keys.duck) {
+                egg.scale.set(0.8, 0.6, 0.8);
+                egg.position.y = 1.6 + Math.abs(Math.sin(time * 2)) * 0.1;
+            } else {
+                egg.scale.set(0.8, 1.2, 0.8);
+                egg.position.y = 2.2 + Math.abs(Math.sin(time * 2)) * 0.1;
+            }
+        }
+
+        leftLeg.rotation.x = Math.sin(time) * 0.8;
+        rightLeg.rotation.x = Math.sin(time + Math.PI) * 0.8;
+        
+        // Flail arms
+        leftArm.rotation.x = Math.sin(time * 3) * 1.2;
+        rightArm.rotation.x = -Math.sin(time * 3) * 1.2;
+
+        updateMeters();
+
+        // Check failure condition (Dot went too far out of bounds)
+        if (Math.hypot(balanceX, balanceY) > 1.0) {
+            isGrounded = false;
+            egg.position.y -= 10 * delta;
+            egg.rotation.z += 10 * delta;
+            if (egg.position.y < -2) {
+                gameOver();
+            }
+        }
+
+        // --- World Movement & Curve Application ---
+        if (Math.hypot(balanceX, balanceY) <= 1.0) {
+            const moveStep = speed * delta;
+            score += moveStep / 10;
+            
+            // Format score to 6 digits with leading zeros
+            scoreDisplay.innerText = String(Math.floor(score * 10)).padStart(6, '0');
+            // Format time display (can count up or down, we'll count up for distance/survival)
+            timeDisplay.innerText = String(Math.floor(timeAlive)).padStart(3, '0');
+            
+            speed += 0.1 * delta;
+            const resetZ = numFences * fenceLength;
+
+            // Spawn Enemies - Lowered frequency, added flying chance
+            if (Math.random() < 0.08 * delta) { 
+                const isFlying = Math.random() < 0.4;
+                const enemy = isFlying ? new THREE.Mesh(flyingGeo, matFlyingEnemy) : new THREE.Mesh(enemyGeo, matEnemy);
+                enemy.isFlying = isFlying;
+                enemy.position.z = -resetZ;
+                enemy.position.y = isFlying ? 3.0 : -2; // Start hidden below fence or high in air
+                worldGroup.add(enemy);
+                enemies.push(enemy);
+            }
+
+            // Move Fences
+            fences.forEach(f => {
+                f.position.z += moveStep;
+                if (f.position.z > camera.position.z) {
+                    f.position.z -= resetZ;
+                    // Randomly make upcoming fence chunks thin
+                    const makeThin = Math.random() < 0.2;
+                    f.isThin = makeThin;
+                    f.children[0].scale.x = makeThin ? 0.35 : 1.0; 
+                }
+                // Apply curve based on squared distance for outrun-style 3D bends
+                f.position.x = currentCurve * Math.pow(-f.position.z, 2);
+                f.rotation.y = -Math.atan(2 * currentCurve * Math.abs(f.position.z));
+            });
+
+            // Move Scenery
+            sceneryObjects.forEach(obj => {
+                obj.position.z += moveStep;
+                if (obj.position.z > camera.position.z + 10) {
+                    obj.position.z -= (resetZ + Math.random() * 20);
+                    const side = Math.random() > 0.5 ? 1 : -1;
+                    obj.originalXOffset = side * (4 + Math.random() * 8);
+                }
+                if (obj.originalXOffset === undefined) obj.originalXOffset = obj.position.x;
+                const roadX = currentCurve * Math.pow(-obj.position.z, 2);
+                obj.position.x = roadX + obj.originalXOffset;
+            });
+
+            // Move Enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                e.position.z += moveStep;
+                
+                // Curve x position to follow the fence
+                e.position.x = currentCurve * Math.pow(-e.position.z, 2);
+                
+                // Jump onto fence logic as they approach (only ground enemies)
+                if (!e.isFlying && e.position.z > -40 && e.position.y < 2.5) {
+                    e.position.y += 10 * delta; 
+                    if (e.position.y > 2.5) e.position.y = 2.5; 
+                }
+
+                // Spin retro spikey ball (or block)
+                e.rotation.x += 2 * delta;
+                e.rotation.y += 3 * delta;
+
+                // Collision Detection (Accounting for ducking & jumping heights)
+                const inZRange = Math.abs(e.position.z - egg.position.z) < 0.8;
+                
+                const eTop = e.position.y + (e.isFlying ? 0.2 : 0.35);
+                const eBottom = e.position.y - (e.isFlying ? 0.2 : 0.35);
+                const eggTop = egg.position.y + (keys.duck ? 0.6 : 1.2);
+                const eggBottom = egg.position.y - (keys.duck ? 0.6 : 1.2);
+                
+                const inYRange = (eggBottom < eTop && eggTop > eBottom);
+
+                if (inZRange && inYRange) {
+                    gameOver();
+                }
+
+                // Cleanup passed enemies
+                if (e.position.z > 5) {
+                    worldGroup.remove(e);
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // --- Window Resize Handling (Maintaining Retro Aspect) ---
+    function resize() {
+        // We do NOT resize the WebGL renderer internal resolution.
+        // We let CSS scale it up. We just ensure the parent container acts normally.
+    }
+    window.addEventListener('resize', resize);
+    
+    // Start loop
+    animate(performance.now());
+
+</script>
+</body>
+</html>
