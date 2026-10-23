@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Egg & Tomato Carnival Dash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Three.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Include Tone.js for Sound & Music Synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            /* Carnival Tent Background */
+            background: repeating-linear-gradient(90deg, #d32f2f, #d32f2f 60px, #fff9c4 60px, #fff9c4 120px);
+            margin: 0; display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-wrapper {
+            position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 8px solid #222; border-radius: 10px; background-color: #111;
+            overflow: hidden; width: 100%; max-width: 1024px; aspect-ratio: 16 / 9;
+        }
+
+        canvas {
+            display: block; width: 100%; height: 100%;
+            image-rendering: pixelated; image-rendering: crisp-edges;
+        }
+
+        /* 90s CRT Scanline Overlay */
+        .crt-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%; z-index: 10; pointer-events: none;
+        }
+
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; z-index: 20; text-align: center;
+        }
+
+        .hidden { display: none !important; }
+
+        .btn {
+            margin-top: 10px; padding: 15px 30px; font-family: inherit; font-size: 14px;
+            cursor: pointer; background-color: #ffeb3b; color: #d32f2f;
+            border: 4px solid #fbc02d; border-radius: 8px; text-transform: uppercase;
+            transition: transform 0.1s, background-color 0.2s;
+        }
+
+        .btn:hover { background-color: #fff59d; transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+
+        #ui-bar {
+            position: absolute; top: 0; left: 0; width: 100%; padding: 10px 15px;
+            box-sizing: border-box; color: white; text-shadow: 2px 2px 0px #000;
+            font-size: 12px; z-index: 5; pointer-events: none;
+        }
+
+        /* Power Bars */
+        .power-container {
+            position: absolute; bottom: 20px; width: 150px; height: 20px;
+            background: rgba(0,0,0,0.5); border: 3px solid #fff; border-radius: 10px;
+            overflow: hidden; z-index: 5;
+        }
+        #power-p1 { left: 5%; }
+        #power-p2 { right: 5%; }
+
+        .power-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #ffeb3b, #f44336); transition: width 0.05s linear; }
+        
+        #split-line {
+            position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 4px; background: white; z-index: 5; box-shadow: 0 0 10px #000;
+        }
+        
+        .score-row { display: flex; justify-content: space-between; width: 100%; margin-bottom: 5px; }
+        .text-green { color: #4ade80; }
+        .text-red { color: #f87171; }
+        .text-yellow { color: #facc15; }
+        .text-blue { color: #60a5fa; }
+
+        /* Floating Score Text */
+        .floating-text {
+            position: absolute; font-size: 20px; font-weight: bold;
+            pointer-events: none; z-index: 50; text-shadow: 2px 2px 0 #000;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Top Right Score Enhancement */
+        #solo-score-container {
+            position: absolute; top: 10px; right: 20px; text-align: right;
+            font-size: 28px; color: #facc15; text-shadow: 3px 3px 0 #000;
+        }
+        #solo-ui-left {
+            position: absolute; top: 10px; left: 20px;
+            font-size: 20px; line-height: 1.5;
+        }
+        
+        .number-lg { font-size: 32px; color: white; }
+        .number-xl { font-size: 40px; color: white; }
+        .number-md { font-size: 24px; color: #facc15; }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="split-line" class="hidden"></div>
+        <div id="floating-text-container"></div>
+        
+        <!-- IN-GAME UI -->
+        <div id="ui-bar" class="hidden">
+            <!-- Solo UI -->
+            <div id="solo-ui" class="hidden w-full">
+                <div id="solo-ui-left">
+                    <div>TIME: <span id="s-time" class="number-lg">60</span></div>
+                    <div>LVL: <span id="s-level" class="number-lg">1</span></div>
+                </div>
+                <div id="solo-score-container">
+                    <div>SCORE: <span id="s-score" class="number-xl">0</span></div>
+                    <div style="font-size: 16px; color: white;">TARGET: <span id="s-target" class="number-md">50</span></div>
+                </div>
+            </div>
+            
+            <!-- Versus UI -->
+            <div id="vs-ui" class="hidden flex justify-between w-full text-lg">
+                <div class="flex flex-col text-left">
+                    <span class="text-blue font-bold">P1 (EGG)</span>
+                    <span>SCORE: <span id="v-p1-score" class="text-3xl text-yellow-300">0</span></span>
+                    <span class="text-yellow text-sm mt-1">WINS: <span id="v-p1-wins" class="text-2xl">0</span>/3</span>
+                </div>
+                <div class="text-center text-2xl">TIME<br><span id="v-time" class="text-5xl text-white">60</span></div>
+                <div class="flex flex-col text-right">
+                    <span class="text-green font-bold">P2 (<span id="v-p2-name">BROC</span>)</span>
+                    <span>SCORE: <span id="v-p2-score" class="text-3xl text-yellow-300">0</span></span>
+                    <span class="text-yellow text-sm mt-1">WINS: <span id="v-p2-wins" class="text-2xl">0</span>/3</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="power-p1" class="power-container hidden"><div id="fill-p1" class="power-fill"></div></div>
+        <div id="power-p2" class="power-container hidden"><div id="fill-p2" class="power-fill"></div></div>
+
+        <canvas id="gameCanvas"></canvas>
+        <div class="crt-overlay"></div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay">
+            <h1 class="text-5xl mb-2 text-yellow-300 drop-shadow-md">CARNIVAL DASH</h1>
+            <p class="text-sm mb-4 text-gray-300">Front: 2pt | Mid: 5pt | Back: 10pt</p>
+            
+            <div class="flex space-x-8 mb-4">
+                <div class="bg-black bg-opacity-50 p-4 rounded border border-blue-500">
+                    <h2 class="text-blue text-sm mb-2">P1 (EGG)</h2>
+                    <p class="text-xs">Move: Left / Right</p>
+                    <p class="text-xs mt-1 text-yellow-300">Hold SPACE to Charge!</p>
+                </div>
+                <div class="bg-black bg-opacity-50 p-4 rounded border border-green-500">
+                    <h2 class="text-green text-sm mb-2">P2 (RIVAL TOWER)</h2>
+                    <p class="text-xs">Computer Controlled</p>
+                    <p class="text-xs mt-1">Defeat the Bosses!</p>
+                </div>
+            </div>
+
+            <p class="text-sm mb-4 text-red-400">Avoid the targets with 'X' (-5 pts!)</p>
+            
+            <div class="flex space-x-4">
+                <button class="btn" id="btn-solo">Play Solo</button>
+                <button class="btn" id="btn-vs">Versus Mode</button>
+            </div>
+            
+            <button class="btn mt-6" style="background-color: #9c27b0; border-color: #6a1b9a; color: white;" id="btn-leaderboard">View Leaderboard</button>
+        </div>
+
+        <!-- Leaderboard Screen -->
+        <div id="leaderboard-screen" class="overlay hidden">
+            <h1 class="text-4xl mb-6 text-yellow-300 drop-shadow-md">TOP SCORES</h1>
+            <div id="leaderboard-list" class="w-full max-w-md bg-black bg-opacity-70 p-4 border-2 border-yellow-300 rounded mb-6 text-lg max-h-64 overflow-y-auto">
+                <!-- Scores injected here -->
+            </div>
+            <button class="btn" id="btn-close-leaderboard">Back to Menu</button>
+        </div>
+
+        <!-- Level Up / Game Over Screens -->
+        <div id="message-screen" class="overlay hidden">
+            <h1 id="msg-title" class="text-4xl mb-4"></h1>
+            <p id="msg-desc" class="text-xl mb-6"></p>
+            
+            <div id="score-submit-container" class="hidden flex-col items-center w-full max-w-xs mb-6">
+                <p class="text-yellow-300 mb-2 font-bold">New High Score?</p>
+                <input type="text" id="player-name-input" placeholder="ENTER INITIALS" class="w-full text-center p-3 mb-2 text-black font-bold uppercase rounded text-xl" maxlength="5">
+                <button class="btn w-full" id="btn-submit-score">Save Score</button>
+            </div>
+
+            <button class="btn" id="btn-continue">Continue</button>
+            <button class="btn hidden mt-2" id="btn-home">Main Menu</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'carnival-dash-default';
+        const fbConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        let db = null;
+        let auth = null;
+        let user = null;
+
+        if (fbConfigStr) {
+            try {
+                const firebaseConfig = JSON.parse(fbConfigStr);
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    user = auth.currentUser;
+                };
+                initAuth();
+            } catch (e) {
+                console.error("Firebase init error", e);
+            }
+        }
+
+        // DOM
+        const screens = {
+            start: document.getElementById('start-screen'),
+            msg: document.getElementById('message-screen'),
+            uiBar: document.getElementById('ui-bar'),
+            splitLine: document.getElementById('split-line'),
+            p1Power: document.getElementById('power-p1'),
+            p2Power: document.getElementById('power-p2'),
+            leaderboard: document.getElementById('leaderboard-screen'),
+            scoreSubmit: document.getElementById('score-submit-container')
+        };
+        
+        // UI Texts
+        const uiText = {
+            sTime: document.getElementById('s-time'),
+            sLevel: document.getElementById('s-level'),
+            sScore: document.getElementById('s-score'),
+            sTarget: document.getElementById('s-target'),
+            vTime: document.getElementById('v-time'),
+            vP2Name: document.getElementById('v-p2-name'),
+            vP1Score: document.getElementById('v-p1-score'),
+            vP2Score: document.getElementById('v-p2-score'),
+            vP1Wins: document.getElementById('v-p1-wins'),
+            vP2Wins: document.getElementById('v-p2-wins'),
+            msgTitle: document.getElementById('msg-title'),
+            msgDesc: document.getElementById('msg-desc')
+        };
+
+        const btnContinue = document.getElementById('btn-continue');
+        const btnHome = document.getElementById('btn-home');
+        const fillP1 = document.getElementById('fill-p1');
+        const fillP2 = document.getElementById('fill-p2');
+
+        // Game State
+        let gameState = 'START'; // START, PLAYING, MSG
+        let gameMode = 'SOLO'; // SOLO, VERSUS
+        let level = 1;
+        let targetScore = 50;
+        let timeRemaining = 60;
+        let lastTime = 0;
+        
+        let p1Score = 0, p2Score = 0;
+        let p1Wins = 0, p2Wins = 0;
+
+        const opponentTower = ['BROCCOLI', 'KOMATSU', 'ASPARAGUS', 'TOMATO'];
+        let currentOpponentIndex = 0;
+        
+        const MAX_CHARGE = 1.0;
+        let p1Charge = 0, p2Charge = 0;
+        let p1Charging = false, p2Charging = false;
+        let p1Cooldown = 0, p2Cooldown = 0;
+
+        // Visual & Audio States
+        let floatingTexts = [];
+        const bgColors = ['#0055ff', '#ff5500', '#5500ff', '#00aa55', '#aa0055'];
+        
+        // AI State
+        let aiTarget = null;
+        
+        // Sound Engine (Tone.js)
+        let audioInited = false;
+        let sfxThrow, sfxHit, sfxMove, bgmSynth, bgmLead, bgmDrum, bgmReverb;
+        let currentBGMEvent = null;
+        let lastMoveSound = 0;
+
+        async function initAudio() {
+            if(audioInited) return;
+            await Tone.start();
+            
+            sfxThrow = new Tone.MembraneSynth({ pitchDecay: 0.1, octaves: 4, oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } }).toDestination();
+            sfxHit = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "square" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.5 } }).toDestination();
+            sfxMove = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0 } }).toDestination();
+            sfxMove.volume.value = -15;
+
+            bgmReverb = new Tone.Freeverb({ roomSize: 0.8, dampening: 3000 }).toDestination();
+            
+            // Haunting, ethereal pad
+            bgmSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: { attack: 2, decay: 1, sustain: 1, release: 4 } }).connect(bgmReverb);
+            bgmSynth.volume.value = -24;
+            
+            // Somber lead melody synth
+            bgmLead = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 1, decay: 0.5, sustain: 0.5, release: 3 } }).connect(bgmReverb);
+            bgmLead.volume.value = -24;
+
+            // Deep, slow heartbeat drum
+            bgmDrum = new Tone.MembraneSynth().toDestination();
+            bgmDrum.volume.value = -18;
+            
+            Tone.Transport.bpm.value = 65;
+            Tone.Transport.start();
+            audioInited = true;
+        }
+
+        function playMove() {
+            if (audioInited && performance.now() - lastMoveSound > 150) {
+                sfxMove.triggerAttackRelease("16n");
+                lastMoveSound = performance.now();
+            }
+        }
+
+        function setBGM(level) {
+            if (!audioInited) return;
+            if (currentBGMEvent) Tone.Transport.clear(currentBGMEvent);
+            
+            // Minimalist "Guts" inspired theme
+            Tone.Transport.bpm.value = 60 + (level * 2);
+
+            const chords = [
+                ["A3", "C4", "E4"], // Am
+                ["G3", "B3", "D4"], // G
+                ["F3", "A3", "C4"], // F
+                ["E3", "G#3", "B3"] // E
+            ];
+            const leadNotes = ["E5", "D5", "C5", "B4"];
+            
+            let step = 0;
+            currentBGMEvent = Tone.Transport.scheduleRepeat((time) => {
+                let measure = Math.floor(step / 4) % 4;
+                let beat = step % 4;
+                
+                if (beat === 0) {
+                    // Slow, ethereal pad chords
+                    bgmSynth.triggerAttackRelease(chords[measure], "1m", time);
+                    // Somber, haunting lead melody
+                    bgmLead.triggerAttackRelease(leadNotes[measure], "2n", time + 0.1);
+                    // Deep, slow heartbeat-like drum
+                    if (measure % 2 === 0) bgmDrum.triggerAttackRelease("C1", "2n", time);
+                }
+                
+                step++;
+            }, "4n");
+        }
+
+        // Three.js Setup (Widescreen for split)
+        const GAME_WIDTH = 426; 
+        const GAME_HEIGHT = 240;
+        const canvas = document.getElementById('gameCanvas');
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false });
+        renderer.setSize(GAME_WIDTH, GAME_HEIGHT, false);
+        renderer.shadowMap.enabled = true;
+        renderer.setScissorTest(false);
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#0055ff');
+        scene.fog = new THREE.Fog('#0055ff', 10, 50);
+
+        // Cameras
+        const cameraP1 = new THREE.PerspectiveCamera(60, GAME_WIDTH / GAME_HEIGHT, 0.1, 1000);
+        const cameraP2 = new THREE.PerspectiveCamera(60, GAME_WIDTH / GAME_HEIGHT, 0.1, 1000);
+        
+        // Lighting
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Vertex Jitter
+        const addJitter = (shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <project_vertex>',
+                `
+                vec4 mvPosition = vec4( transformed, 1.0 );
+                #ifdef USE_INSTANCING
+                    mvPosition = instanceMatrix * mvPosition;
+                #endif
+                mvPosition = modelViewMatrix * mvPosition;
+                gl_Position = projectionMatrix * mvPosition;
+                gl_Position.xyz = gl_Position.xyz / gl_Position.w;
+                gl_Position.x = floor(gl_Position.x * 213.0) / 213.0; // Half-width jitter
+                gl_Position.y = floor(gl_Position.y * 240.0) / 240.0;
+                gl_Position.xyz *= gl_Position.w;
+                `
+            );
+        };
+
+        // Textures & Floor
+        const ctxCanvas = document.createElement('canvas');
+        ctxCanvas.width = 64; ctxCanvas.height = 64;
+        const ctx = ctxCanvas.getContext('2d');
+        ctx.fillStyle = '#00aa00'; ctx.fillRect(0,0, 64, 64);
+        ctx.fillStyle = '#008800'; ctx.fillRect(0,0, 32, 32); ctx.fillRect(32,32, 32, 32);
+        const floorTex = new THREE.CanvasTexture(ctxCanvas);
+        floorTex.magFilter = THREE.NearestFilter;
+        floorTex.wrapS = THREE.RepeatWrapping; floorTex.wrapT = THREE.RepeatWrapping;
+        floorTex.repeat.set(20, 20);
+
+        const floorMat = new THREE.MeshPhongMaterial({ map: floorTex, flatShading: true });
+        floorMat.onBeforeCompile = addJitter;
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), floorMat);
+        floor.rotation.x = -Math.PI / 2; floor.position.y = -1;
+        floor.receiveShadow = true; scene.add(floor);
+
+        // Shelves
+        const shelvesData = [
+            { y: 0.5, z: 0, points: 2 },
+            { y: 0.5, z: -5, points: 5 },
+            { y: 0.5, z: -10, points: 10 }
+        ];
+        const shelfGeo = new THREE.BoxGeometry(60, 0.5, 3);
+        const shelfMat = new THREE.MeshPhongMaterial({ color: '#ffcc00', flatShading: true });
+        shelfMat.onBeforeCompile = addJitter;
+        shelvesData.forEach(s => {
+            const shelf = new THREE.Mesh(shelfGeo, shelfMat);
+            shelf.position.set(0, s.y - 0.5, s.z);
+            shelf.castShadow = true; shelf.receiveShadow = true;
+            scene.add(shelf);
+        });
+
+        
+        function createArm(color, xOffset, rot) {
+            const geo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 5);
+            const mat = new THREE.MeshPhongMaterial({ color: color, flatShading: true });
+            mat.onBeforeCompile = addJitter;
+            const arm = new THREE.Mesh(geo, mat);
+            arm.position.set(xOffset, 0, 0);
+            arm.rotation.z = rot;
+            return arm;
+        }
+
+        function createPlayer1() {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshPhongMaterial({ color: '#ffffff', flatShading: true });
+            bodyMat.onBeforeCompile = addJitter;
+            const body = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), bodyMat);
+            body.scale.set(1, 1.3, 1);
+            body.castShadow = true;
+            group.add(body);
+            group.add(createArm('#ffffff', -1.0, Math.PI/4));
+            group.add(createArm('#ffffff', 1.0, -Math.PI/4));
+            return group;
+        }
+
+        function getOpponentModel(type) {
+            const group = new THREE.Group();
+            let mainMat, secondaryMat;
+            
+            if (type === 'BROCCOLI') {
+                mainMat = new THREE.MeshPhongMaterial({ color: '#22c55e', flatShading: true });
+                secondaryMat = new THREE.MeshPhongMaterial({ color: '#86efac', flatShading: true });
+                mainMat.onBeforeCompile = addJitter; secondaryMat.onBeforeCompile = addJitter;
+                
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.4, 1.5, 6), secondaryMat);
+                stem.position.y = -0.5; stem.castShadow = true; group.add(stem);
+                const crowns = [[0, 0.5, 0], [-0.5, 0.2, 0.5], [0.5, 0.2, 0.5], [0, 0.2, -0.6]];
+                crowns.forEach(pos => {
+                    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), mainMat);
+                    head.position.set(...pos); head.castShadow = true; group.add(head);
+                });
+                group.add(createArm('#86efac', -0.9, Math.PI/4));
+                group.add(createArm('#86efac', 0.9, -Math.PI/4));
+            } else if (type === 'KOMATSU') {
+                mainMat = new THREE.MeshPhongMaterial({ color: '#166534', flatShading: true }); // Dark green
+                mainMat.onBeforeCompile = addJitter;
+                const base = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.2, 1.0, 6), mainMat);
+                base.position.y = -0.5; base.castShadow = true; group.add(base);
+                
+                for(let i=0; i<5; i++) {
+                    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 4), mainMat);
+                    leaf.position.y = 0.5;
+                    leaf.rotation.z = (Math.random() - 0.5) * 0.5;
+                    leaf.rotation.x = (Math.random() - 0.5) * 0.5;
+                    leaf.castShadow = true; group.add(leaf);
+                }
+                group.add(createArm('#166534', -0.8, Math.PI/4));
+                group.add(createArm('#166534', 0.8, -Math.PI/4));
+            } else if (type === 'ASPARAGUS') {
+                mainMat = new THREE.MeshPhongMaterial({ color: '#86efac', flatShading: true });
+                secondaryMat = new THREE.MeshPhongMaterial({ color: '#15803d', flatShading: true });
+                mainMat.onBeforeCompile = addJitter; secondaryMat.onBeforeCompile = addJitter;
+                
+                const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2.5, 6), mainMat);
+                stalk.castShadow = true; group.add(stalk);
+                const tip = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 5), secondaryMat);
+                tip.position.y = 1.6; tip.castShadow = true; group.add(tip);
+                
+                group.add(createArm('#86efac', -0.6, Math.PI/4));
+                group.add(createArm('#86efac', 0.6, -Math.PI/4));
+            } else if (type === 'TOMATO') {
+                mainMat = new THREE.MeshPhongMaterial({ color: '#ef4444', flatShading: true });
+                secondaryMat = new THREE.MeshPhongMaterial({ color: '#22c55e', flatShading: true });
+                mainMat.onBeforeCompile = addJitter; secondaryMat.onBeforeCompile = addJitter;
+                
+                const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.2, 1), mainMat);
+                body.scale.set(1, 0.9, 1); body.castShadow = true; group.add(body);
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.4, 5), secondaryMat);
+                stem.position.y = 1.2; group.add(stem);
+                
+                group.add(createArm('#ef4444', -1.3, Math.PI/4));
+                group.add(createArm('#ef4444', 1.3, -Math.PI/4));
+            }
+            return group;
+        }
+
+        function updateOpponentVisuals() {
+            if (gameMode !== 'VERSUS') return;
+            const oppName = opponentTower[currentOpponentIndex];
+            uiText.vP2Name.innerText = oppName.substring(0, 4); // Keep UI compact
+            
+            // Clear existing model
+            while(player2.children.length > 0){ 
+                player2.remove(player2.children[0]); 
+            }
+            player2.add(getOpponentModel(oppName));
+        }
+
+        let player1 = createPlayer1();
+        let player2 = new THREE.Group();
+        scene.add(player1);
+        scene.add(player2);
+
+        // Entities
+        let tomatoes = [];
+        let targets = [];
+        let particles = [];
+        let spawnTimer = 0;
+
+        // Input
+        const keys = { a: false, d: false, space: false, ArrowLeft: false, ArrowRight: false };
+        window.addEventListener('keydown', (e) => {
+            let k = e.key;
+            if (e.key === ' ' || e.code === 'Space') {
+                k = 'space';
+                e.preventDefault(); // Prevent page scrolling
+            }
+            
+            if(keys.hasOwnProperty(k)) {
+                keys[k] = true;
+                
+                if (gameState === 'PLAYING') {
+                    if (k === 'space' && !p1Charging && p1Cooldown <= 0) { p1Charging = true; p1Charge = 0; }
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            let k = e.key;
+            if (e.key === ' ' || e.code === 'Space') {
+                k = 'space';
+            }
+
+            if(keys.hasOwnProperty(k)) {
+                keys[k] = false;
+            }
+
+            if (gameState === 'PLAYING') {
+                if (k === 'space' && p1Charging) {
+                    throwTomato(player1, p1Charge, 'P1');
+                    p1Charging = false; p1Charge = 0; fillP1.style.width = '0%';
+                    p1Cooldown = 1.0; // 1 second cooldown
+                }
+            }
+        });
+
+        function throwTomato(player, charge, owner) {
+            if (audioInited) sfxThrow.triggerAttackRelease("G2", "8n");
+            
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshPhongMaterial({ color: '#ff0000', flatShading: true });
+            bodyMat.onBeforeCompile = addJitter;
+            const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), bodyMat);
+            body.castShadow = true; group.add(body);
+
+            const stemMat = new THREE.MeshPhongMaterial({ color: '#00ff00', flatShading: true });
+            stemMat.onBeforeCompile = addJitter;
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 4), stemMat);
+            stem.position.y = 0.4; group.add(stem);
+
+            group.position.copy(player.position);
+            group.position.y += 1;
+            scene.add(group);
+
+            let powerRatio = Math.min(charge / MAX_CHARGE, 1.0);
+            tomatoes.push({
+                mesh: group, owner: owner, active: true,
+                vx: 0, vy: 5 + (powerRatio * 10), vz: -15 - (powerRatio * 25)
+            });
+        }
+
+        function createTargetMesh(type) {
+            const group = new THREE.Group();
+            let mat;
+            switch(type) {
+                case 'CARROT':
+                    mat = new THREE.MeshPhongMaterial({ color: '#f97316', flatShading: true });
+                    const carrot = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.5, 5), mat);
+                    carrot.rotation.z = Math.PI/2;
+                    group.add(carrot);
+                    break;
+                case 'BANANA':
+                    mat = new THREE.MeshPhongMaterial({ color: '#eab308', flatShading: true });
+                    const banana = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.2, 4, 8, Math.PI), mat);
+                    banana.rotation.z = -Math.PI/4;
+                    group.add(banana);
+                    break;
+                case 'DRAGONFRUIT':
+                    mat = new THREE.MeshPhongMaterial({ color: '#ec4899', flatShading: true });
+                    const df = new THREE.Mesh(new THREE.SphereGeometry(0.7, 6, 6), mat);
+                    group.add(df);
+                    // Spikes
+                    const spikeMat = new THREE.MeshPhongMaterial({ color: '#4ade80', flatShading: true });
+                    for(let i=0; i<4; i++) {
+                        let s = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.4, 4), spikeMat);
+                        s.position.set((Math.random()-0.5), (Math.random()-0.5), (Math.random()-0.5)).normalize().multiplyScalar(0.7);
+                        s.lookAt(0,0,0);
+                        group.add(s);
+                    }
+                    break;
+                default: // WATERMELON
+                    mat = new THREE.MeshPhongMaterial({ color: '#22c55e', flatShading: true });
+                    const melon = new THREE.Mesh(new THREE.SphereGeometry(0.8, 6, 6), mat);
+                    melon.scale.set(1.1, 0.9, 1);
+                    group.add(melon);
+            }
+            group.children.forEach(c => { if(c.material) c.material.onBeforeCompile = addJitter; c.castShadow = true; });
+            return group;
+        }
+
+        function spawnTarget() {
+            const shelf = shelvesData[Math.floor(Math.random() * shelvesData.length)];
+            const isCorrect = Math.random() > 0.25; // 25% chance of being bad
+            const direction = Math.random() > 0.5 ? 1 : -1;
+            const types = ['WATERMELON', 'CARROT', 'BANANA', 'DRAGONFRUIT'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            const group = createTargetMesh(type);
+
+            if (!isCorrect) {
+                const crossMat = new THREE.MeshPhongMaterial({ color: '#ef4444', flatShading: true });
+                crossMat.onBeforeCompile = addJitter;
+                const barGeo = new THREE.BoxGeometry(1.2, 0.2, 0.2);
+                const bar1 = new THREE.Mesh(barGeo, crossMat); bar1.position.z = 0.9; bar1.rotation.z = Math.PI/4;
+                const bar2 = new THREE.Mesh(barGeo, crossMat); bar2.position.z = 0.9; bar2.rotation.z = -Math.PI/4;
+                group.add(bar1, bar2);
+            }
+
+            group.position.set(direction === 1 ? -25 : 25, shelf.y, shelf.z);
+            scene.add(group);
+
+            // Speed formula
+            let timeFactor = (60 - timeRemaining) / 60; // 0 to 1
+            let speedMult = 1 + (level * 0.2) + (timeFactor * 0.8);
+            
+            targets.push({
+                mesh: group, points: shelf.points,
+                speed: (4 + Math.random() * 4) * direction * speedMult,
+                isCorrect: isCorrect, radius: 0.8
+            });
+        }
+
+        function createExplosion(pos, isCorrect) {
+            if (audioInited) sfxHit.triggerAttackRelease(isCorrect ? ["C5", "E5"] : ["C3", "D#3"], "16n");
+            
+            const color = isCorrect ? '#4ade80' : '#ef4444';
+            const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const mat = new THREE.MeshPhongMaterial({ color: color, flatShading: true });
+            mat.onBeforeCompile = addJitter;
+
+            for(let i=0; i<12; i++) {
+                const p = new THREE.Mesh(geo, mat); p.position.copy(pos); scene.add(p);
+                particles.push({
+                    mesh: p, life: 1.0,
+                    vx: (Math.random()-0.5)*15, vy: Math.random()*15 + 5, vz: (Math.random()-0.5)*15
+                });
+            }
+        }
+
+        function createFloatingText(amount, pos3D, isP1) {
+            const container = document.getElementById('floating-text-container');
+            const el = document.createElement('div');
+            el.className = 'floating-text ' + (amount > 0 ? 'text-green' : 'text-red');
+            el.innerText = amount > 0 ? '+' + amount : amount;
+            container.appendChild(el);
+            
+            floatingTexts.push({
+                element: el,
+                pos: pos3D.clone(),
+                life: 1.0,
+                camera: isP1 ? cameraP1 : (gameMode === 'VERSUS' ? cameraP2 : cameraP1),
+                isP2: !isP1
+            });
+        }
+
+        async function startGame(mode) {
+            await initAudio();
+            gameMode = mode; level = 1; targetScore = 30; p1Wins = 0; p2Wins = 0; currentOpponentIndex = 0;
+            updateOpponentVisuals();
+            resetRound();
+            screens.start.classList.add('hidden');
+            screens.msg.classList.add('hidden');
+            screens.uiBar.classList.remove('hidden');
+            
+            document.getElementById('solo-ui').classList.toggle('hidden', gameMode !== 'SOLO');
+            document.getElementById('vs-ui').classList.toggle('hidden', gameMode !== 'VERSUS');
+            screens.splitLine.classList.toggle('hidden', gameMode !== 'VERSUS');
+            
+            screens.p1Power.classList.remove('hidden');
+            if(gameMode === 'SOLO') {
+                screens.p1Power.style.left = '50%';
+                screens.p1Power.style.transform = 'translateX(-50%)';
+                screens.p2Power.classList.add('hidden');
+                player2.visible = false;
+            } else {
+                screens.p1Power.style.left = '5%';
+                screens.p1Power.style.transform = 'none';
+                screens.p2Power.classList.remove('hidden');
+                player2.visible = true;
+                
+                // Adjust cameras for split screen
+                cameraP1.aspect = (GAME_WIDTH/2)/GAME_HEIGHT; cameraP1.updateProjectionMatrix();
+                cameraP2.aspect = (GAME_WIDTH/2)/GAME_HEIGHT; cameraP2.updateProjectionMatrix();
+            }
+        }
+
+        function resetRound() {
+            setBGM(level);
+            scene.background = new THREE.Color(bgColors[(level - 1) % bgColors.length]);
+            scene.fog.color = scene.background;
+            
+            timeRemaining = 60; p1Score = 0; p2Score = 0; p1Charge = 0; p2Charge = 0;
+            p1Charging = false; p2Charging = false; p1Cooldown = 0; p2Cooldown = 0;
+            fillP1.style.width = '0%'; fillP2.style.width = '0%'; fillP1.style.background = ''; fillP2.style.background = '';
+            aiTarget = null;
+            player1.position.set(gameMode === 'SOLO' ? 0 : -5, 0.3, 8);
+            player2.position.set(5, 0.3, 8);
+            
+            gameState = 'PLAYING';
+            lastTime = performance.now();
+            updateUI();
+        }
+
+        function showMessage(title, desc, showHome = false) {
+            gameState = 'MSG';
+            screens.msg.classList.remove('hidden');
+            uiText.msgTitle.innerText = title;
+            uiText.msgDesc.innerText = desc;
+            uiText.msgTitle.className = `text-4xl mb-4 ${title.includes('WIN') || title.includes('CLEARED') || title.includes('CHAMPION') ? 'text-green-400' : 'text-red-400'}`;
+            btnHome.classList.toggle('hidden', !showHome);
+            btnContinue.classList.toggle('hidden', showHome);
+            
+            screens.scoreSubmit.classList.add('hidden');
+            screens.scoreSubmit.classList.remove('flex');
+
+            screens.p1Power.classList.add('hidden');
+            screens.p2Power.classList.add('hidden');
+        }
+
+        function handleRoundEnd() {
+            if (gameMode === 'SOLO') {
+                if (p1Score >= targetScore) {
+                    level++; targetScore = Math.floor(targetScore * 1.5);
+                    showMessage('LEVEL CLEARED!', `Great job! Get ready for Level ${level}.\nNew Target: ${targetScore}`);
+                } else {
+                    showMessage('GAME OVER', `You scored ${p1Score}, but needed ${targetScore}.`, true);
+                    if (db && user) {
+                        screens.scoreSubmit.classList.remove('hidden');
+                        screens.scoreSubmit.classList.add('flex');
+                    }
+                }
+            } else {
+                let text = "";
+                let oppName = opponentTower[currentOpponentIndex];
+                
+                if (p1Score > p2Score) { p1Wins++; text = "EGG WINS ROUND!"; }
+                else if (p2Score > p1Score) { p2Wins++; text = oppName + " WINS ROUND!"; }
+                else { text = "ROUND TIED!"; }
+
+                if (p1Wins >= 3) {
+                    if (currentOpponentIndex < opponentTower.length - 1) {
+                        let nextOpp = opponentTower[currentOpponentIndex + 1];
+                        showMessage(oppName + ' DEFEATED!', `Get ready for the next challenger: ${nextOpp}!`);
+                        currentOpponentIndex++;
+                        p1Wins = 0; p2Wins = 0;
+                        updateOpponentVisuals();
+                    } else {
+                        showMessage('CHAMPION!', 'You defeated the Tomato Boss and conquered the tower!', true);
+                    }
+                } else if (p2Wins >= 3) {
+                    showMessage('GAME OVER', `${oppName} eliminated you from the tournament!`, true);
+                } else {
+                    showMessage(text, `Scores -> P1: ${p1Score} | P2: ${p2Score}`);
+                }
+            }
+        }
+
+        function update(dt) {
+            if (timeRemaining <= 0) { timeRemaining = 0; handleRoundEnd(); return; }
+            timeRemaining -= dt;
+
+            // Movement & Limits
+            let moveSpeed = 15;
+            let leftBound = gameMode === 'SOLO' ? -15 : -15;
+            let p1RightBound = gameMode === 'SOLO' ? 15 : -1;
+            
+            if (keys.a || keys.ArrowLeft) { player1.position.x -= moveSpeed * dt; playMove(); }
+            if (keys.d || keys.ArrowRight) { player1.position.x += moveSpeed * dt; playMove(); }
+            player1.position.x = Math.max(leftBound, Math.min(p1RightBound, player1.position.x));
+
+            if (gameMode === 'VERSUS') {
+                // AI Logic for Player 2
+                if (!aiTarget || !targets.includes(aiTarget) || aiTarget.mesh.position.x < 0) {
+                    let validTargets = targets.filter(t => t.isCorrect && t.mesh.position.x > 0);
+                    aiTarget = validTargets.length > 0 ? validTargets[0] : null;
+                }
+
+                if (aiTarget) {
+                    // Lead the target slightly
+                    let targetDist = Math.abs(aiTarget.mesh.position.z) / 10; // 0 to 1
+                    let leadOffset = aiTarget.speed * targetDist * 0.5;
+                    let targetX = aiTarget.mesh.position.x + leadOffset;
+
+                    if (Math.abs(player2.position.x - targetX) > 0.5) {
+                        player2.position.x += Math.sign(targetX - player2.position.x) * moveSpeed * dt;
+                        playMove();
+                    }
+                    
+                    if (Math.abs(player2.position.x - targetX) < 1.0 && p2Cooldown <= 0) {
+                        if (!p2Charging) { p2Charging = true; p2Charge = 0; }
+                        
+                        // Required charge based on Z depth
+                        let requiredCharge = 0.2; // front shelf
+                        if (aiTarget.mesh.position.z === -5) requiredCharge = 0.5;
+                        if (aiTarget.mesh.position.z === -10) requiredCharge = 0.8;
+                        
+                        // Add slight randomization to AI charge to simulate human imperfection
+                        requiredCharge += (Math.random() * 0.1) - 0.05;
+
+                        if (p2Charge >= requiredCharge) {
+                            throwTomato(player2, p2Charge, 'P2');
+                            p2Charging = false; p2Charge = 0; fillP2.style.width = '0%';
+                            p2Cooldown = 1.0;
+                            aiTarget = null;
+                        }
+                    }
+                }
+                
+                player2.position.x = Math.max(1, Math.min(15, player2.position.x));
+            }
+
+            // Cooldown & Charging Visuals
+            if (p1Cooldown > 0) {
+                p1Cooldown -= dt;
+                fillP1.style.background = '#888';
+                fillP1.style.width = `${(p1Cooldown/1.0)*100}%`;
+            } else if (p1Charging) { 
+                p1Charge += dt; 
+                fillP1.style.background = 'linear-gradient(90deg, #ffeb3b, #f44336)';
+                fillP1.style.width = `${Math.min((p1Charge/MAX_CHARGE)*100, 100)}%`; 
+            } else {
+                fillP1.style.width = '0%';
+            }
+
+            if (p2Cooldown > 0) {
+                p2Cooldown -= dt;
+                fillP2.style.background = '#888';
+                fillP2.style.width = `${(p2Cooldown/1.0)*100}%`;
+            } else if (p2Charging) { 
+                p2Charge += dt; 
+                fillP2.style.background = 'linear-gradient(90deg, #ffeb3b, #f44336)';
+                fillP2.style.width = `${Math.min((p2Charge/MAX_CHARGE)*100, 100)}%`; 
+            } else {
+                fillP2.style.width = '0%';
+            }
+
+            // Cameras
+            cameraP1.position.set(player1.position.x, player1.position.y + 4, player1.position.z + 7);
+            cameraP1.lookAt(player1.position.x, 0.5, -5);
+            
+            if(gameMode === 'VERSUS') {
+                cameraP2.position.set(player2.position.x, player2.position.y + 4, player2.position.z + 7);
+                cameraP2.lookAt(player2.position.x, 0.5, -5);
+            }
+
+            // Tomatoes
+            for (let i = tomatoes.length - 1; i >= 0; i--) {
+                let t = tomatoes[i];
+                t.vy -= 40 * dt; // Gravity
+                t.mesh.position.x += t.vx * dt; t.mesh.position.y += t.vy * dt; t.mesh.position.z += t.vz * dt;
+                t.mesh.rotation.x -= 10 * dt;
+                if (t.mesh.position.y < -2) { scene.remove(t.mesh); tomatoes.splice(i, 1); }
+            }
+
+            // Spawning (Faster as levels/time progress)
+            spawnTimer -= dt;
+            if (spawnTimer <= 0) {
+                spawnTarget();
+                let spawnBase = gameMode === 'SOLO' ? 0.8 : 0.5; // More targets in VS
+                spawnTimer = spawnBase - Math.min((level*0.05), 0.3) + Math.random()*0.5; 
+            }
+
+            // Targets & Collisions
+            for (let i = targets.length - 1; i >= 0; i--) {
+                let tgt = targets[i];
+                tgt.mesh.position.x += tgt.speed * dt;
+                tgt.mesh.rotation.x += tgt.speed * dt * 0.5;
+
+                if (Math.abs(tgt.mesh.position.x) > 30) { scene.remove(tgt.mesh); targets.splice(i, 1); continue; }
+
+                for (let b = tomatoes.length - 1; b >= 0; b--) {
+                    let tom = tomatoes[b];
+                    if (tom.mesh.position.distanceTo(tgt.mesh.position) < tgt.radius + 0.4) {
+                        let pts = tgt.isCorrect ? tgt.points : -5;
+                        let isP1 = tom.owner === 'P1';
+                        if (isP1) p1Score += pts; else p2Score += pts;
+                        
+                        createFloatingText(pts, tgt.mesh.position, isP1);
+                        createExplosion(tgt.mesh.position, tgt.isCorrect);
+                        
+                        scene.remove(tgt.mesh); targets.splice(i, 1);
+                        scene.remove(tom.mesh); tomatoes.splice(b, 1);
+                        break; // Target dead
+                    }
+                }
+            }
+
+            // Particles
+            for(let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.vy -= 25 * dt; p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt;
+                p.life -= dt * 1.5; p.mesh.scale.setScalar(Math.max(p.life, 0.001));
+                if(p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+            }
+
+            // Floating Texts
+            for(let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i];
+                ft.life -= dt;
+                ft.pos.y += dt * 5; // Float up
+                
+                if(ft.life <= 0) {
+                    ft.element.remove();
+                    floatingTexts.splice(i, 1);
+                    continue;
+                }
+                
+                ft.element.style.opacity = ft.life;
+                
+                // Map 3D to 2D
+                let vector = ft.pos.clone().project(ft.camera);
+                let halfW = window.innerWidth / 2;
+                let halfH = window.innerHeight / 2;
+                
+                let screenX = (vector.x * halfW) + halfW;
+                let screenY = -(vector.y * halfH) + halfH;
+                
+                // Adjust for split screen
+                if (gameMode === 'VERSUS') {
+                    screenX = (vector.x * (window.innerWidth / 4)) + (window.innerWidth / 4);
+                    if (ft.isP2) screenX += window.innerWidth / 2;
+                }
+                
+                ft.element.style.left = screenX + 'px';
+                ft.element.style.top = screenY + 'px';
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            let t = Math.ceil(timeRemaining);
+            uiText.sTime.innerText = t; uiText.vTime.innerText = t;
+            uiText.sLevel.innerText = level; uiText.sTarget.innerText = targetScore;
+            uiText.sScore.innerText = p1Score;
+            
+            uiText.vP1Score.innerText = p1Score; uiText.vP2Score.innerText = p2Score;
+            uiText.vP1Wins.innerText = p1Wins; uiText.vP2Wins.innerText = p2Wins;
+        }
+
+        function draw() {
+            if (gameMode === 'SOLO') {
+                renderer.setScissorTest(false);
+                renderer.setViewport(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                renderer.render(scene, cameraP1);
+            } else {
+                renderer.setScissorTest(true);
+                // P1 Left Half
+                renderer.setViewport(0, 0, GAME_WIDTH/2, GAME_HEIGHT);
+                renderer.setScissor(0, 0, GAME_WIDTH/2, GAME_HEIGHT);
+                renderer.render(scene, cameraP1);
+                // P2 Right Half
+                renderer.setViewport(GAME_WIDTH/2, 0, GAME_WIDTH/2, GAME_HEIGHT);
+                renderer.setScissor(GAME_WIDTH/2, 0, GAME_WIDTH/2, GAME_HEIGHT);
+                renderer.render(scene, cameraP2);
+            }
+        }
+
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1;
+            lastTime = timestamp;
+
+            if (gameState === 'PLAYING') update(dt);
+            else if (gameState === 'START') {
+                // Idle animation
+                cameraP1.position.set(0, 5, 10); cameraP1.lookAt(0,0,-5);
+            }
+            
+            draw();
+        }
+
+        // Event Listeners
+        document.getElementById('btn-solo').addEventListener('click', () => startGame('SOLO'));
+        document.getElementById('btn-vs').addEventListener('click', () => startGame('VERSUS'));
+        
+        document.getElementById('btn-leaderboard').addEventListener('click', async () => {
+            screens.start.classList.add('hidden');
+            screens.leaderboard.classList.remove('hidden');
+            const listEl = document.getElementById('leaderboard-list');
+            listEl.innerHTML = '<div class="text-center text-white">Loading...</div>';
+            
+            if (!db || !user) {
+                listEl.innerHTML = '<div class="text-center text-red-400">Leaderboard unavailable.</div>';
+                return;
+            }
+
+            try {
+                const collRef = collection(db, 'artifacts', appId, 'public', 'data', 'solo_scores');
+                const snap = await getDocs(collRef);
+                let scores = [];
+                snap.forEach(d => scores.push(d.data()));
+                scores.sort((a, b) => b.score - a.score);
+                scores = scores.slice(0, 10);
+                
+                if (scores.length === 0) {
+                    listEl.innerHTML = '<div class="text-center text-gray-400">No scores yet!</div>';
+                } else {
+                    listEl.innerHTML = scores.map((s, i) => `
+                        <div class="flex justify-between border-b border-gray-600 py-2">
+                            <span class="text-yellow-300 font-bold">${i+1}. ${s.name}</span>
+                            <span class="text-white">${s.score} <span class="text-sm text-gray-400">(Lvl ${s.level})</span></span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error(e);
+                listEl.innerHTML = '<div class="text-center text-red-400">Error loading scores.</div>';
+            }
+        });
+
+        document.getElementById('btn-close-leaderboard').addEventListener('click', () => {
+            screens.leaderboard.classList.add('hidden');
+            screens.start.classList.remove('hidden');
+        });
+
+        document.getElementById('btn-submit-score').addEventListener('click', async () => {
+            const nameInput = document.getElementById('player-name-input');
+            const name = nameInput.value.trim().toUpperCase() || 'ANON';
+            const btn = document.getElementById('btn-submit-score');
+            
+            if (!db || !user) return;
+            
+            btn.disabled = true;
+            btn.innerText = 'Saving...';
+            
+            try {
+                const collRef = collection(db, 'artifacts', appId, 'public', 'data', 'solo_scores');
+                await addDoc(collRef, {
+                    name: name,
+                    score: p1Score,
+                    level: level,
+                    timestamp: Date.now(),
+                    userId: user.uid
+                });
+                screens.scoreSubmit.classList.add('hidden');
+                screens.scoreSubmit.classList.remove('flex');
+            } catch(e) {
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Save Score';
+            }
+        });
+
+        btnContinue.addEventListener('click', async () => {
+            screens.msg.classList.add('hidden');
+            resetRound();
+        });
+
+        btnHome.addEventListener('click', () => {
+            screens.msg.classList.add('hidden');
+            screens.uiBar.classList.add('hidden');
+            screens.start.classList.remove('hidden');
+            screens.p1Power.classList.add('hidden');
+            screens.p2Power.classList.add('hidden');
+            if (currentBGMEvent) Tone.Transport.clear(currentBGMEvent);
+            gameState = 'START';
+        });
+
+        // Initialize the animation loop once the window is fully loaded
+        window.onload = function () {
+            lastTime = performance.now();
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
